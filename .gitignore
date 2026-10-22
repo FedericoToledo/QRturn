@@ -1,0 +1,5 @@
+node_modules/
+data/*.sqlite
+data/*.sqlite-*
+data/clave-inicial.txt
+data/clave-de-prueba.txt

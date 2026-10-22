@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Turnos en la puerta — Dent. Alejandra Reverter</title>
+<style>
+  @font-face { font-family: Fraunces; src: url("../public/fonts/fraunces-500.woff2") format("woff2"); font-weight: 500; font-style: normal; }
+  @font-face { font-family: Fraunces; src: url("../public/fonts/fraunces-600.woff2") format("woff2"); font-weight: 600; font-style: normal; }
+  @font-face { font-family: Outfit; src: url("../public/fonts/outfit-400.woff2") format("woff2"); font-weight: 400; font-style: normal; }
+  @font-face { font-family: Outfit; src: url("../public/fonts/outfit-500.woff2") format("woff2"); font-weight: 500; font-style: normal; }
+  @font-face { font-family: Outfit; src: url("../public/fonts/outfit-600.woff2") format("woff2"); font-weight: 600; font-style: normal; }
+
+  :root {
+    --paper: #f3efe6;
+    --card: #fffdf8;
+    --pine: #1f4a3e;
+    --pine-2: #16362e;
+    --brass: #8d6840;
+    --brass-suave: #e7d3b8;
+    --ink: #1c241f;
+    --muted: #5c564c;
+    --sage: #d5ebe2;
+    --line: #e2d9c8;
+  }
+
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  @page { size: A4; margin: 0; }
+
+  .hoja {
+    width: 210mm;
+    height: 297mm;
+    position: relative;
+    overflow: hidden;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Outfit, sans-serif;
+    font-weight: 400;
+    page-break-after: always;
+    break-after: page;
+  }
+  .hoja:last-child { page-break-after: auto; break-after: auto; }
+
+  .pie {
+    position: absolute;
+    left: 16mm;
+    right: 16mm;
+    bottom: 9mm;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 8.5pt;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  .pie b { font-weight: 500; color: var(--pine); }
+
+  .kicker {
+    margin: 0 0 2.5mm;
+    font-size: 9pt;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--brass);
+  }
+  h2 {
+    margin: 0;
+    font-family: Fraunces, serif;
+    font-weight: 500;
+    font-size: 26pt;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--pine);
+  }
+  .intro {
+    margin: 3.5mm 0 0;
+    max-width: 168mm;
+    font-size: 12.5pt;
+    line-height: 1.42;
+    color: var(--ink);
+  }
+
+  .cuerpo { padding: 16mm 16mm 18mm; }
+
+  /* Portada */
+  .portada { display: flex; flex-direction: column; background: var(--paper); }
+  .banda {
+    background: var(--pine);
+    color: #f6f1e6;
+    padding: 16mm 16mm 14mm;
+  }
+  .banda .kicker { color: #e4c9a4; }
+  .banda h1 {
+    margin: 0;
+    max-width: 160mm;
+    font-family: Fraunces, serif;
+    font-weight: 500;
+    font-size: 42pt;
+    line-height: 0.98;
+    letter-spacing: -0.03em;
+    color: #f6f1e6;
+  }
+  .banda .lead {
+    margin: 6mm 0 0;
+    max-width: 150mm;
+    font-size: 13pt;
+    line-height: 1.4;
+    color: #e7efe9;
+  }
+  .bajo {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 12mm 16mm 14mm;
+  }
+  .identidad {
+    display: grid;
+    grid-template-columns: 32mm 1fr;
+    gap: 5mm;
+    align-items: center;
+    margin: 0;
+  }
+  .puente {
+    margin: 8mm 0 0;
+    max-width: 168mm;
+    font-size: 13pt;
+    line-height: 1.42;
+  }
+  .identidad img { width: 32mm; height: 32mm; object-fit: contain; }
+  .marca {
+    margin: 0;
+    font-family: Fraunces, serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: 14pt;
+    color: var(--brass);
+  }
+  .nombre {
+    margin: 0;
+    font-family: Fraunces, serif;
+    font-weight: 500;
+    font-size: 22pt;
+    line-height: 1.05;
+    color: var(--pine);
+  }
+  .dato { margin: 1.2mm 0 0; font-size: 11.5pt; color: var(--muted); }
+  .indice {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3.5mm 8mm;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .tres { list-style: none; margin: 0; padding: 0; }
+  .tres li {
+    margin: 0;
+    padding: 3.8mm 0;
+    border-top: 0.35mm solid var(--line);
+    font-family: Fraunces, serif;
+    font-weight: 500;
+    font-size: 16pt;
+    line-height: 1.2;
+    color: var(--pine);
+  }
+  .tres li:last-child { border-bottom: 0.35mm solid var(--line); }
+  .base {
+    background: var(--pine);
+    color: #e4c9a4;
+    padding: 5.5mm 16mm;
+    font-size: 9.5pt;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .indice li {
+    display: flex;
+    gap: 3mm;
+    align-items: baseline;
+    padding-top: 2.5mm;
+    border-top: 0.3mm solid var(--line);
+    font-size: 12pt;
+    color: var(--pine);
+  }
+  .indice span {
+    font-family: Fraunces, serif;
+    font-size: 12pt;
+    color: var(--brass);
+  }
+
+  /* Tarjetas del problema */
+  .tarjeta {
+    display: grid;
+    grid-template-columns: 16mm 1fr;
+    gap: 2mm;
+    margin: 5mm 0 0;
+    padding: 5.5mm 6mm;
+    background: var(--card);
+    border-radius: 5mm;
+  }
+  .tarjeta .n {
+    font-family: Fraunces, serif;
+    font-weight: 500;
+    font-size: 22pt;
+    line-height: 1;
+    color: var(--brass);
+  }
+  .tarjeta h3 {
+    margin: 0 0 1.5mm;
+    font-family: Fraunces, serif;
+    font-weight: 500;
+    font-size: 16pt;
+    color: var(--pine);
+  }
+  .tarjeta p, .linea p, .texto p, .cierre p { margin: 0; font-size: 12.5pt; line-height: 1.42; }
+  .cierre {
+    margin-top: 6mm;
+    padding: 5mm 6mm;
+    background: var(--sage);
+    border-radius: 5mm;
+  }
+  .cierre strong { font-weight: 600; color: var(--pine); }
+
+  /* Pasos de cómo funciona */
+  .linea { list-style: none; margin: 7mm 0 0; padding: 0; }
+  .linea li {
+    display: grid;
+    grid-template-columns: 14mm 1fr;
+    gap: 4mm;
+    align-items: start;
+    padding: 4.2mm 0;
+    border-top: 0.3mm solid var(--line);
+  }
+  .linea b {
+    display: grid;
+    place-items: center;
+    width: 11mm;
+    height: 11mm;
+    border-radius: 50%;
+    background: var(--pine);
+    color: #f6f1e6;
+    font-family: Fraunces, serif;
+    font-weight: 500;
+    font-size: 13pt;
+  }
+  .linea h3 {
+    margin: 0.4mm 0 1.2mm;
+    font-family: Fraunces, serif;
+    font-weight: 500;
+    font-size: 15pt;
+    color: var(--pine);
+  }
+
+  /* Cómo prenderlo */
+  .pasos-lista { margin: 5mm 0 0; padding: 0; list-style: none; }
+  .pasos-lista li {
+    display: grid;
+    grid-template-columns: 9mm 1fr;
+    gap: 3mm;
+    margin: 0 0 3.6mm;
+    font-size: 12.5pt;
+    line-height: 1.4;
+  }
+  .pasos-lista b { font-family: Fraunces, serif; font-weight: 500; color: var(--brass); font-size: 14pt; }
+  .ficha {
+    margin-top: 2mm;
+    background: var(--card);
+    border-radius: 5mm;
+    overflow: hidden;
+  }
+  .ficha div {
+    display: grid;
+    grid-template-columns: 38mm 1fr;
+    gap: 4mm;
+    padding: 3.2mm 5mm;
+    border-top: 0.3mm solid var(--line);
+    font-size: 12pt;
+  }
+  .ficha div:first-child { border-top: 0; }
+  .ficha span { color: var(--muted); }
+  .ficha strong { font-weight: 600; color: var(--pine); }
+
+  /* Teléfono + texto */
+  .lado {
+    display: grid;
+    grid-template-columns: 98mm 1fr;
+    gap: 7mm;
+    align-items: start;
+    margin-top: 5mm;
+  }
+  .marco {
+    background: var(--pine-2);
+    padding: 2.4mm;
+    border-radius: 8mm;
+    line-height: 0;
+    box-shadow: 0 10px 24px rgba(28, 36, 31, 0.14);
+  }
+  .marco img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6mm;
+  }
+  .texto .paso {
+    margin: 0 0 2mm;
+    font-family: Fraunces, serif;
+    font-size: 13pt;
+    color: var(--brass);
+  }
+  .texto p { margin: 0 0 3.2mm; }
+  .texto ul { margin: 0; padding: 0 0 0 4.5mm; }
+  .texto li { margin: 0 0 2.2mm; font-size: 12pt; line-height: 1.38; }
+  .llamada {
+    margin-top: 4mm;
+    padding: 3.5mm 4mm;
+    background: var(--brass-suave);
+    border-radius: 4mm;
+    font-size: 11pt;
+    line-height: 1.38;
+  }
+
+  /* Dos teléfonos */
+  .dos {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7mm;
+    margin-top: 5mm;
+  }
+  .dos figure { margin: 0; }
+  .dos .marco img { width: 100%; }
+  figcaption {
+    margin-top: 2.4mm;
+    font-size: 10.5pt;
+    line-height: 1.32;
+    color: var(--ink);
+  }
+  figcaption b { font-weight: 600; color: var(--pine); }
+
+  .nota-pie {
+    position: absolute;
+    left: 16mm;
+    right: 16mm;
+    bottom: 16mm;
+    padding: 3.2mm 4.5mm;
+    background: var(--sage);
+    border-radius: 4mm;
+    font-size: 11pt;
+    line-height: 1.35;
+  }
+
+  /* Cierre */
+  .cierre-grid {
+    display: grid;
+    grid-template-columns: 1fr 78mm;
+    gap: 7mm;
+    align-items: start;
+    margin-top: 5mm;
+  }
+  .cierre-grid .marco { background: transparent; padding: 0; box-shadow: none; }
+  .cierre-grid .marco img {
+    border-radius: 5mm;
+    box-shadow: 0 10px 24px rgba(28, 36, 31, 0.12);
+  }
+  .hecho { list-style: none; margin: 0; padding: 0; }
+  .hecho li {
+    margin: 0 0 3mm;
+    padding-left: 5mm;
+    border-left: 0.8mm solid var(--brass);
+    font-size: 12pt;
+    line-height: 1.38;
+  }
+  .aviso {
+    margin-top: 4mm;
+    padding: 4mm 4.5mm;
+    background: var(--card);
+    border-radius: 4mm;
+    font-size: 11pt;
+    line-height: 1.4;
+  }
+  .aviso + .aviso { margin-top: 3mm; }
+  .numero-clave {
+    margin: 1mm 0 1.5mm;
+    font-family: Fraunces, serif;
+    font-weight: 500;
+    font-size: 28pt;
+    letter-spacing: 0.12em;
+    line-height: 1;
+    color: var(--pine);
+  }
+  .link {
+    margin: 1.5mm 0;
+    font-size: 11pt;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--pine);
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+
+<section class="hoja portada">
+  <div class="banda">
+    <p class="kicker">Para Alejandra</p>
+    <h1>Turnos en la puerta.</h1>
+    <p class="lead">El consultorio cierra durante el día, atendés sola y también trabajás en clínicas. Este cuaderno muestra cómo la gente saca turno igual, desde el celular.</p>
+  </div>
+  <div class="bajo">
+    <div>
+      <div class="identidad">
+        <img src="../public/image/logo.png" alt="">
+        <div>
+          <p class="marca">Dent.</p>
+          <p class="nombre">Alejandra Reverter</p>
+          <p class="dato">Odontología · Matrícula 61.178</p>
+          <p class="dato">Urquiza 300, San Nicolás de los Arroyos</p>
+        </div>
+      </div>
+      <p class="puente">Primero, el problema y cómo queda resuelto. Después, las pantallas: las de quien saca el turno, y las tuyas.</p>
+    </div>
+    <ul class="tres">
+      <li>La puerta cerrada durante el día.</li>
+      <li>Las horas de las clínicas, fuera del QR.</li>
+      <li>El turno, en tu teléfono.</li>
+    </ul>
+    <ol class="indice">
+      <li><span>01</span> Qué problema resuelve</li>
+      <li><span>02</span> Cómo funciona</li>
+      <li><span>03</span> El paso a paso del paciente</li>
+      <li><span>04</span> Tu agenda, tus horarios y la puerta</li>
+    </ol>
+  </div>
+  <p class="base">Consultorio · Urquiza 300</p>
+</section>
+
+<section class="hoja">
+  <div class="cuerpo">
+    <p class="kicker">El problema</p>
+    <h2>Tres cosas al mismo tiempo.</h2>
+    <p class="intro">Hola, Alejandra. El consultorio de Urquiza necesita algo chico: que quien pasa pueda dejar sus datos y elegir una hora en la que vos estás.</p>
+
+    <article class="tarjeta">
+      <div class="n">1</div>
+      <div>
+        <h3>La puerta cerrada</h3>
+        <p>El consultorio está en casa. Durante el día no hay nadie para abrir. Quien pasa se va, o tiene que volver a la noche.</p>
+      </div>
+    </article>
+    <article class="tarjeta">
+      <div class="n">2</div>
+      <div>
+        <h3>Sin secretaria</h3>
+        <p>Mientras atendés en una clínica, nadie toma el teléfono ni anota en un cuaderno. El turno se pierde en el camino.</p>
+      </div>
+    </article>
+    <article class="tarjeta">
+      <div class="n">3</div>
+      <div>
+        <h3>Las otras clínicas</h3>
+        <p>Esas horas tienen que quedar ocupadas. Si el cartel las ofrece, alguien saca turno a una hora en la que estás en otro lado.</p>
+      </div>
+    </article>
+
+    <div class="cierre">
+      <p><strong>Lo que hace el sistema.</strong> Separa el consultorio de las clínicas. En el QR solo aparecen las horas que vos marcás como disponibles. El resto queda en tu agenda, para que lo veas vos, y el paciente no.</p>
+    </div>
+  </div>
+  <footer class="pie"><span>Dent. Alejandra Reverter</span><b>2</b></footer>
+</section>
+
+<section class="hoja">
+  <div class="cuerpo">
+    <p class="kicker">Cómo funciona</p>
+    <h2>De la puerta a tu teléfono.</h2>
+    <p class="intro">Cuatro pasos. La persona los hace sola. A vos te queda el turno anotado.</p>
+    <ol class="linea">
+      <li>
+        <b>1</b>
+        <div>
+          <h3>Un QR, o un link</h3>
+          <p>El QR se abre con la cámara, en la puerta. El link abre la misma pantalla: va en el contestador de WhatsApp, para quien ya tiene tu número agendado.</p>
+        </div>
+      </li>
+      <li>
+        <b>2</b>
+        <div>
+          <h3>Deja sus datos</h3>
+          <p>Nombre, apellido, DNI, obra social y número de afiliado. Si no tiene obra social, elige Particular. Si ya tenía turno, lo busca con el DNI.</p>
+        </div>
+      </li>
+      <li>
+        <b>3</b>
+        <div>
+          <h3>Elige un horario del consultorio</h3>
+          <p>Ve los días y las horas que marcaste como disponibles. Las horas de las clínicas no están en esa lista.</p>
+        </div>
+      </li>
+      <li>
+        <b>4</b>
+        <div>
+          <h3>El turno te aparece a vos</h3>
+          <p>En tu agenda quedan el nombre, el DNI, la obra social y la hora. Quien reserva se lleva un código por si tiene que cancelar.</p>
+        </div>
+      </li>
+    </ol>
+    <div class="cierre">
+      <p>Cada turno dura los minutos que vos pongas en Más. Ahí también elegís hasta cuántos días adelante se ofrece, y con cuánta anticipación. En la foto de más adelante los horarios aparecen cada media hora porque así quedó armado ese ejemplo.</p>
+    </div>
+  </div>
+  <footer class="pie"><span>Dent. Alejandra Reverter</span><b>3</b></footer>
+</section>
+
+<section class="hoja">
+  <div class="cuerpo">
+    <p class="kicker">Del lado del paciente · 1</p>
+    <h2>Llega y deja sus datos.</h2>
+    <div class="lado">
+      <figure class="marco">
+        <img src="capturas/01-datos.png" alt="Pantalla inicial del paciente, con el formulario vacío">
+      </figure>
+      <div class="texto">
+        <p class="paso">Lo primero que ve</p>
+        <p>El logo, Dent. Alejandra Reverter, la matrícula 61.178 y Urquiza 300. Abajo, una sola frase: que deje sus datos y elija un horario.</p>
+        <ul>
+          <li>Nombre y apellido, el DNI, la obra social y el número de afiliado.</li>
+          <li><strong>Ver turnos</strong> sigue al horario.</li>
+          <li><strong>Ya tengo un turno</strong> busca una reserva anterior con el DNI, para verla o cancelarla.</li>
+        </ul>
+        <p class="llamada">El formulario entra en la pantalla del teléfono, de una vez. La matrícula y la dirección se editan en Más. En el listado del Círculo Odontológico de San Nicolás, de septiembre de 2025, figuran 61.178 y Urquiza 300.</p>
+      </div>
+    </div>
+  </div>
+  <footer class="pie"><span>Dent. Alejandra Reverter</span><b>4</b></footer>
+</section>
+
+<section class="hoja">
+  <div class="cuerpo">
+    <p class="kicker">Del lado del paciente · 2</p>
+    <h2>Elige la obra social.</h2>
+    <p class="intro">Toca Buscar y aparece el listado: las obras nacionales y las de la provincia de Buenos Aires, más las prepagas de uso común. Si no tiene cobertura, elige Particular.</p>
+    <div class="dos">
+      <figure>
+        <div class="marco"><img src="capturas/03-completo.png" alt="Formulario completo con IOMA y el número de afiliado"></div>
+        <figcaption><b>Datos listos.</b> María López es una paciente de prueba. Con IOMA, el campo explica cómo cargar el número del carnet, sin la barra.</figcaption>
+      </figure>
+      <figure>
+        <div class="marco"><img src="capturas/02-obras.png" alt="Listado de obras sociales: Particular, IOMA, PAMI, OSDE y otras"></div>
+        <figcaption><b>La lista.</b> Particular, IOMA, PAMI, OSDE, OSAP, OSECAC, Swiss Medical y el resto. Se puede escribir para buscar.</figcaption>
+      </figure>
+    </div>
+  </div>
+  <p class="nota-pie">El sistema revisa que el número tenga la forma de esa obra. Las obras no publican el padrón de afiliados: es un dato de salud. La cobertura la confirmás vos, con el carnet.</p>
+  <footer class="pie"><span>Dent. Alejandra Reverter</span><b>5</b></footer>
+</section>
+
+<section class="hoja">
+  <div class="cuerpo">
+    <p class="kicker">Del lado del paciente · 3</p>
+    <h2>Elige la hora y le queda el turno.</h2>
+    <p class="intro">Solo ve días de consultorio. En el ejemplo, martes y jueves a la noche. La separación entre un horario y el siguiente es la que vos dejes en Más. Esa tarde, por la anticipación, ya no se ofrecían las 18 ni las 19: en la foto quedan las 20:00 y las 20:30.</p>
+    <div class="dos">
+      <figure>
+        <div class="marco"><img src="capturas/04-turnos.png" alt="Elección de día y horario del consultorio"></div>
+        <figcaption><b>Antes de confirmar.</b> En la foto todavía no tocó la hora, y el botón sigue apagado. Al elegir 20:00 puede reservar.</figcaption>
+      </figure>
+      <figure>
+        <div class="marco"><img src="capturas/05-listo.png" alt="Turno reservado: jueves 22 de octubre a las 20:00"></div>
+        <figcaption><b>Turno reservado.</b> Día, hora, dirección y un código. Si no puede venir, lo cancela con el DNI y ese código. Le pide el DNI y el carnet.</figcaption>
+      </figure>
+    </div>
+  </div>
+  <footer class="pie"><span>Dent. Alejandra Reverter</span><b>6</b></footer>
+</section>
+
+<section class="hoja">
+  <div class="cuerpo">
+    <p class="kicker">De tu lado · 1</p>
+    <h2>Entrás con seis números.</h2>
+    <div class="lado">
+      <figure class="marco">
+        <img src="capturas/06-clave.png" alt="Teclado de la clave de la agenda">
+      </figure>
+      <div class="texto">
+        <p class="paso">Tu agenda</p>
+        <p>El link abre lo mismo que el QR. Para la agenda, se le agrega <strong>/admin</strong>.</p>
+        <p class="link">https://moisture-created-coated-securities.trycloudflare.com/admin</p>
+        <p class="numero-clave">339187</p>
+        <p>Clave del usuario de demostración. Ese teléfono la recuerda unos 30 días. Desde Más podés poner una clave nueva.</p>
+        <p class="llamada">Abajo vas a ver cuatro lugares: Agenda, Horarios, Pacientes y Más. Agenda es el día de hoy. Horarios es lo que el QR ofrece. Pacientes es quien ya se anotó. Más es el cartel, la matrícula y la dirección.</p>
+      </div>
+    </div>
+  </div>
+  <footer class="pie"><span>Dent. Alejandra Reverter</span><b>7</b></footer>
+</section>
+
+<section class="hoja">
+  <div class="cuerpo">
+    <p class="kicker">De tu lado · 2</p>
+    <h2>El día, hora por hora.</h2>
+    <div class="lado">
+      <figure class="marco">
+        <img src="capturas/07-agenda.png" alt="Agenda del jueves 22 de octubre, con un turno reservado a las 20:00">
+      </figure>
+      <div class="texto">
+        <p class="paso">Agenda</p>
+        <p>Este es el jueves 22 de octubre, en la prueba. Arriba dice el consultorio: 18:00 a 21:00.</p>
+        <ul>
+          <li>La franja beige, de 8 a 17, son <strong>horarios ocupados</strong>. El paciente no los ve.</li>
+          <li>18:00, 18:30, 19:00 y 19:30 siguen libres. Tocás uno y anotás un turno a mano.</li>
+          <li>A las 20:00 está María López, de prueba, con IOMA. El cartel dice que el formato del número es el de IOMA.</li>
+        </ul>
+        <p class="llamada">Las flechas cambian de día. Tocás el turno y podés marcarlo como cobertura ok, atendido, o cancelarlo. Si lo cancelás, la hora vuelve a quedar libre.</p>
+      </div>
+    </div>
+  </div>
+  <footer class="pie"><span>Dent. Alejandra Reverter</span><b>8</b></footer>
+</section>
+
+<section class="hoja">
+  <div class="cuerpo">
+    <p class="kicker">De tu lado · 3</p>
+    <h2>Qué ve el QR cada semana.</h2>
+    <div class="lado">
+      <figure class="marco">
+        <img src="capturas/08-horarios.png" alt="Horarios del jueves: consultorio de 18 a 21 y ocupado de 8 a 17">
+      </figure>
+      <div class="texto">
+        <p class="paso">Horarios</p>
+        <p>Elegís el día de la semana. Lo que quede en Disponible sale en el QR. Lo que quede en Ocupada, no.</p>
+        <ul>
+          <li>Primera tarjeta: el jueves, de 18 a 21, <strong>Disponible</strong>. Eso es el consultorio.</li>
+          <li>Segunda tarjeta: <strong>Horarios ocupados</strong>, de 8 a 17. El paciente no las ve.</li>
+          <li>En esa misma tarjeta se agrega una franja nueva. Podés ponerle el nombre de la clínica.</li>
+        </ul>
+        <p class="llamada">«Un día distinto» sirve para una excepción: un feriado, un consultorio cerrado, o un día extra. El resto de las semanas sigue igual.</p>
+      </div>
+    </div>
+  </div>
+  <footer class="pie"><span>Dent. Alejandra Reverter</span><b>9</b></footer>
+</section>
+
+<section class="hoja">
+  <div class="cuerpo">
+    <p class="kicker">De tu lado · 4</p>
+    <h2>La semana, de un vistazo.</h2>
+    <p class="intro">Misma pantalla, un poco más abajo. La franja ocupada se arma ahí, y debajo está la minigrilla de los próximos siete días.</p>
+    <div class="lado">
+      <figure class="marco">
+        <img src="capturas/10-proximos.png" alt="Franja ocupada y grilla del 22 al 28 de octubre">
+      </figure>
+      <div class="texto">
+        <p class="paso">Próximos</p>
+        <p>Del 22 al 28 de octubre, en el ejemplo. Cada columna es un día.</p>
+        <ul>
+          <li><strong>Marrón:</strong> horas ocupadas. De lunes a viernes se ve el 8–17.</li>
+          <li><strong>Verde:</strong> un turno ya sacado. El jueves 22 tiene el de las 20:00.</li>
+          <li>Sábado y domingo quedan en blanco: ese fin de semana el consultorio no abre.</li>
+        </ul>
+        <p class="llamada">Tocás el turno verde y vas a ese día en la agenda. Así ves el nombre sin recorrer hora por hora.</p>
+      </div>
+    </div>
+  </div>
+  <footer class="pie"><span>Dent. Alejandra Reverter</span><b>10</b></footer>
+</section>
+
+<section class="hoja">
+  <div class="cuerpo">
+    <p class="kicker">De tu lado · 5</p>
+    <h2>Quienes ya se anotaron.</h2>
+    <div class="lado">
+      <figure class="marco">
+        <img src="capturas/11-pacientes.png" alt="Listado de pacientes registrados, con María López">
+      </figure>
+      <div class="texto">
+        <p class="paso">Pacientes</p>
+        <p>El título es <strong>Listado de pacientes registrados</strong>. Ahí queda cada persona que sacó un turno, aunque después lo haya cancelado.</p>
+        <ul>
+          <li>Se busca por apellido o por DNI.</li>
+          <li>Ves la obra social, el número y si el formato está bien.</li>
+          <li>En la prueba, María López figura con IOMA y el cartel «Formato de IOMA aceptado».</li>
+        </ul>
+        <p class="llamada">Ese cartel habla del formato del número. La cobertura la confirmás con el carnet, cuando la recibís.</p>
+      </div>
+    </div>
+  </div>
+  <footer class="pie"><span>Dent. Alejandra Reverter</span><b>11</b></footer>
+</section>
+
+<section class="hoja">
+  <div class="cuerpo">
+    <p class="kicker">De tu lado · 6</p>
+    <h2>El QR y el link.</h2>
+    <p class="intro">Los dos abren la misma pantalla. El QR va en la puerta. El link va en el contestador de WhatsApp, para quien ya tiene tu número agendado.</p>
+    <div class="cierre-grid">
+      <div>
+        <ul class="hecho">
+          <li>Link de hoy: <span class="link">https://moisture-created-coated-securities.trycloudflare.com</span></li>
+          <li>La agenda es ese link con <strong>/admin</strong>. La clave del usuario de demostración es <strong>339187</strong>.</li>
+          <li>En Más, el botón dice <strong>Imprimir para la puerta</strong>.</li>
+          <li>Este link sirve hoy, mientras la computadora siga encendida.</li>
+        </ul>
+        <div class="aviso">Las obras sociales no publican el padrón de afiliados. El sistema trae el listado de obras y revisa la forma del número. Si el número es un CUIL, también revisa el dígito y el DNI. Si una obra te pasa su propio archivo, lo cargás en Más y ahí puede corroborar a esa persona.</div>
+        <div class="aviso">En Más definís cuántos minutos dura cada turno. También la matrícula, la dirección, el texto de la puerta y las horas de anticipación.</div>
+      </div>
+      <figure class="marco">
+        <img src="capturas/13-poster.png" alt="Cartel para la puerta, con el logo, el nombre y el código QR">
+      </figure>
+    </div>
+  </div>
+  <footer class="pie"><span>Dent. Alejandra Reverter</span><b>12</b></footer>
+</section>
+
+</body>
+</html>

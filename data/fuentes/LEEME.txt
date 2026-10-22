@@ -1,0 +1,27 @@
+De dónde salen las obras sociales
+=================================
+
+Archivo rnas-sisa.json
+Fuente: compilación abierta cluster311/obras-sociales-argentinas, que junta dos registros públicos:
+- Superintendencia de Servicios de Salud, listado RNAS (dump listRnosc).
+- SISA, padrón de agentes del seguro, donde figura IOMA (O.S.P. Buenos Aires, código 902001).
+La copia usada corresponde al repositorio actualizado en mayo de 2025 y se incorporó el 22 de octubre de 2026.
+
+Qué se muestra en el consultorio
+- Obras con sede en la provincia de Buenos Aires o en CABA.
+- Agentes nacionales del RNAS, porque cubren todo el país, incluida la provincia.
+- PAMI (INSSJP, RNAS 500807).
+- IOMA.
+- Prepagas habituales en la provincia (Swiss Medical, Galeno, Omint, Medicus, Medifé, Avalian, Prevención Salud, Accord Salud), cargadas aparte porque no siempre están en el RNAS.
+Quedan afuera las obras sociales provinciales de otras provincias, por ejemplo IAPOS o IPROSS.
+
+El CSV data/obras-sociales-buenos-aires.csv es ese mismo listado, para abrirlo en Excel. No contiene afiliados.
+
+Por qué no hay un padrón de números de afiliado
+El padrón de beneficiarios de la Superintendencia y el PUCO no se publican para descargar. Son datos de salud. Se consultan de a una persona, con usuario de una obra social o de un hospital. Bajar o armar una base de números de afiliado no es posible con fuentes públicas, y este programa no inventa afiliados.
+
+Lo que sí contrasta el formulario
+- Si el número tiene 11 dígitos, se verifica el dígito del CUIL y si adentro está el DNI.
+- En PAMI, los primeros 11 de los 14 números del beneficio tienen que ser un CUIL válido.
+- En IOMA se controla que la cantidad de números sea la del carnet.
+- Si Alejandra carga un CSV propio (rnos, dni, numero), el turno se contrasta contra ese archivo.
