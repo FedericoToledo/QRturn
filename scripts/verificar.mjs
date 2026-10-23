@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { armarCuil, digitosCuilValidos, dniDentroDeCuil } from '../lib/cuil.mjs';
 import { diaDeObra, diasHabiles, nivelPlazo, venceDePrestacion, marcaPadron } from '../lib/plazos.mjs';
-import { hoyBA } from '../lib/tiempo.mjs';
+import { hoyBA, sumarDias } from '../lib/tiempo.mjs';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dentapp-'));
@@ -386,6 +386,75 @@ try {
   afirmar(pisan.length >= 2 && pisan.every((hora) => !horasDespues.includes(hora)), 'el conducto tapa los turnos que se pisarían');
   const sigue = diaLargo.horas.filter((hora) => aMinutos(hora) >= aMinutos(horaLarga) + conducto.minutos);
   afirmar(sigue.length > 0 && sigue.every((hora) => horasDespues.includes(hora)), 'lo que queda después del conducto sigue libre');
+
+  const libresAntes = await pedir(base, '/api/disponibles');
+  const diaVacacion = libresAntes.data.dias.find((item) => item.fecha !== dia.fecha && item.fecha !== diaLargo.fecha && item.horas.length >= 2);
+  afirmar(Boolean(diaVacacion), 'hay un día libre para probar las vacaciones');
+  const horaVacacion = diaVacacion.horas[0];
+  const horaSiguiente = diaVacacion.horas.find((hora) => aMinutos(hora) >= aMinutos(horaVacacion) + 40);
+  afirmar(Boolean(horaSiguiente), 'queda otro horario que no pisa el turno de las vacaciones');
+  const turnoPrevio = await pedir(base, '/api/turnos', {
+    method: 'POST',
+    body: { nombre: 'Vera', apellido: 'Costa', dni: '33111000', obraId: particular.id, fecha: diaVacacion.fecha, hora: horaVacacion },
+  });
+  afirmar(turnoPrevio.data.ok, 'queda un turno antes de las vacaciones');
+  const rango = await pedir(base, '/api/admin/vacaciones', {
+    method: 'POST',
+    body: { desde: diaVacacion.fecha, hasta: diaVacacion.fecha },
+  });
+  afirmar(rango.data.ok && rango.data.id, 'guarda unas vacaciones de un día');
+  const invertido = await pedir(base, '/api/admin/vacaciones', {
+    method: 'POST',
+    body: { desde: diaVacacion.fecha, hasta: '2020-01-01' },
+  });
+  afirmar(invertido.data.ok === false, 'rechaza unas vacaciones que terminan antes de empezar');
+  const fechaMala = await pedir(base, '/api/admin/vacaciones', {
+    method: 'POST',
+    body: { desde: 'ayer', hasta: 'ayer' },
+  });
+  afirmar(fechaMala.data.ok === false, 'rechaza una fecha de vacaciones inválida');
+  const desdeLargo = '2027-03-01';
+  const cabe = await pedir(base, '/api/admin/vacaciones', {
+    method: 'POST',
+    body: { desde: desdeLargo, hasta: sumarDias(desdeLargo, 89) },
+  });
+  afirmar(cabe.data.ok, 'acepta vacaciones de 90 días');
+  await pedir(base, `/api/admin/vacaciones/${cabe.data.id}`, { method: 'DELETE' });
+  const noCabe = await pedir(base, '/api/admin/vacaciones', {
+    method: 'POST',
+    body: { desde: desdeLargo, hasta: sumarDias(desdeLargo, 90) },
+  });
+  afirmar(noCabe.data.ok === false, 'rechaza unas vacaciones de más de 90 días');
+  const pisa = await pedir(base, '/api/admin/vacaciones', {
+    method: 'POST',
+    body: { desde: diaVacacion.fecha, hasta: diaVacacion.fecha },
+  });
+  afirmar(pisa.data.ok === false, 'no repite unas vacaciones en las mismas fechas');
+  const listaVac = await pedir(base, '/api/admin/vacaciones');
+  afirmar(Array.isArray(listaVac.data) && listaVac.data.some((item) => item.id === rango.data.id && item.desde === diaVacacion.fecha && item.hasta === diaVacacion.fecha), 'lista las vacaciones');
+  const bloquesSiguen = await pedir(base, '/api/admin/bloques');
+  afirmar(Array.isArray(bloquesSiguen.data), 'los horarios siguen siendo una lista');
+  const sinDia = await pedir(base, '/api/disponibles');
+  afirmar(!sinDia.data.dias.some((item) => item.fecha === diaVacacion.fecha), 'en vacaciones el paciente no ve ese día');
+  const intento = await pedir(base, '/api/turnos', {
+    method: 'POST',
+    body: { nombre: 'Nora', apellido: 'Diaz', dni: '33222000', obraId: particular.id, fecha: diaVacacion.fecha, hora: horaSiguiente },
+  });
+  afirmar(intento.data.ok === false && intento.data.error === 'Ese horario ya no está disponible.', 'nadie reserva un horario de vacaciones');
+  const adminIntento = await pedir(base, '/api/admin/turnos', {
+    method: 'POST',
+    body: { nombre: 'Nora', apellido: 'Diaz', dni: '33222000', obraId: particular.id, fecha: diaVacacion.fecha, hora: horaSiguiente },
+  });
+  afirmar(adminIntento.data.ok === false && String(adminIntento.data.error).includes('vacaciones'), 'la agenda no anota un turno en vacaciones');
+  const agendaVac = await pedir(base, `/api/admin/dia?fecha=${diaVacacion.fecha}`);
+  afirmar(agendaVac.data.vacaciones === true && agendaVac.data.libres.length === 0 && agendaVac.data.turnos.some((item) => item.dni === '33111000'), 'el turno que ya estaba queda en las vacaciones');
+  const semanaVac = await pedir(base, `/api/admin/semana?desde=${diaVacacion.fecha}`);
+  afirmar(semanaVac.data.dias[0].ocupados.some((ocupado) => ocupado.tipo === 'vacaciones'), 'la semana marca el día de vacaciones');
+  const quitadaVac = await pedir(base, `/api/admin/vacaciones/${rango.data.id}`, { method: 'DELETE' });
+  afirmar(quitadaVac.data.ok, 'quita las vacaciones');
+  const volvio = await pedir(base, '/api/disponibles');
+  const diaVuelto = volvio.data.dias.find((item) => item.fecha === diaVacacion.fecha);
+  afirmar(Boolean(diaVuelto) && !diaVuelto.horas.includes(horaVacacion) && diaVuelto.horas.includes(horaSiguiente), 'al quitar las vacaciones vuelven los horarios que no estaban ocupados');
 
   const csv = fs.readFileSync(path.join(raiz, 'data', 'obras-sociales-buenos-aires.csv'), 'utf8');
   afirmar(csv.includes('IOMA') && csv.includes('902001') && !csv.includes('30111222'), 'el CSV es de obras sociales, no de afiliados');

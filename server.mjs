@@ -15,7 +15,10 @@ import {
   crearTurno,
   diaAdmin,
   diasDisponibles,
+  agregarVacaciones,
+  borrarVacaciones,
   listarBloques,
+  listarVacaciones,
   publicoTurno,
   semanaTurnos,
   turnoVigente,
@@ -440,6 +443,20 @@ async function rutaAdmin(req, res, ruta, url) {
   const borrar = ruta.match(/^\/api\/admin\/bloques\/(\d+)$/);
   if (borrar && req.method === 'DELETE') {
     enviarJson(res, 200, { ok: borrarBloque(borrar[1]) });
+    return true;
+  }
+  if (ruta === '/api/admin/vacaciones' && req.method === 'GET') {
+    enviarJson(res, 200, listarVacaciones());
+    return true;
+  }
+  if (ruta === '/api/admin/vacaciones' && req.method === 'POST') {
+    const cuerpo = await leerCuerpo(req);
+    enviarJson(res, 200, agregarVacaciones(cuerpo.desde, cuerpo.hasta));
+    return true;
+  }
+  const quitarVacaciones = ruta.match(/^\/api\/admin\/vacaciones\/(\d+)$/);
+  if (quitarVacaciones && req.method === 'DELETE') {
+    enviarJson(res, 200, { ok: borrarVacaciones(quitarVacaciones[1]) });
     return true;
   }
   if (ruta === '/api/admin/turnos' && req.method === 'POST') {

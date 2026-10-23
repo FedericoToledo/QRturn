@@ -12,6 +12,10 @@ const state = {
   dia: null,
   abierto: null,
   bloques: [],
+  vacaciones: [],
+  horarioAbiertos: { dia: false, vacaciones: false },
+  vacacionDesde: '',
+  vacacionHasta: '',
   pacientes: [],
   consulta: '',
   ajustes: null,
@@ -75,9 +79,11 @@ function login() {
 function eventosDelDia() {
   const dia = state.dia;
   const eventos = [];
-  for (const bloque of dia.bloques) {
-    if (bloque.tipo === 'consultorio') continue;
-    eventos.push({ tipo: 'bloque', desde: bloque.desde, hasta: bloque.hasta, lugar: bloque.lugar, clase: bloque.tipo });
+  if (!dia.vacaciones) {
+    for (const bloque of dia.bloques) {
+      if (bloque.tipo === 'consultorio') continue;
+      eventos.push({ tipo: 'bloque', desde: bloque.desde, hasta: bloque.hasta, lugar: bloque.lugar, clase: bloque.tipo });
+    }
   }
   for (const turno of dia.turnos) eventos.push({ tipo: 'turno', desde: turno.hora, turno });
   for (const hora of dia.libres) eventos.push({ tipo: 'libre', desde: hora });
@@ -88,9 +94,11 @@ function eventosDelDia() {
 function agenda() {
   const dia = state.dia;
   const consultorio = dia.bloques.filter((bloque) => bloque.tipo === 'consultorio');
-  const horasConsultorio = consultorio.length
-    ? consultorio.map((bloque) => `${bloque.desde}–${bloque.hasta}`).join(', ')
-    : 'sin horarios';
+  const horasConsultorio = dia.vacaciones
+    ? 'vacaciones'
+    : consultorio.length
+      ? consultorio.map((bloque) => `${bloque.desde}–${bloque.hasta}`).join(', ')
+      : 'sin horarios';
   const lista = eventosDelDia().map((evento) => {
     if (evento.tipo === 'bloque') {
       return `<article class="banda ${evento.clase === 'cerrado' ? 'cerrado' : ''}">
@@ -123,6 +131,7 @@ function agenda() {
       <button type="button" class="flecha" data-accion="dia-siguiente" aria-label="Día siguiente">›</button>
     </div>
     <p class="bajada">Consultorio: ${esc(horasConsultorio)}.</p>
+    ${dia.vacaciones ? '<p class="bajada">Esos días el paciente no ve horarios. Los turnos que ya están quedan.</p>' : ''}
     ${dia.fecha === hoyLocal() ? '' : '<button class="btn secundario chico" type="button" data-accion="hoy">Volver a hoy</button>'}
     ${lista || '<p class="vacio">Este día no tiene nada cargado.</p>'}
     ${state.anotar ? formularioAnotar() : ''}
@@ -227,8 +236,19 @@ function franjaFila(bloque) {
 }
 
 function textoOcupado(ocupado) {
+  if (ocupado.tipo === 'vacaciones') return 'Vacaciones';
   if (ocupado.tipo === 'cerrado') return 'Cerrado';
   return `${Number(ocupado.desde.slice(0, 2))}–${Number(ocupado.hasta.slice(0, 2))}`;
+}
+
+function filaVacacion(item) {
+  const texto = item.desde === item.hasta
+    ? larga(item.desde)
+    : `Del ${larga(item.desde)} al ${larga(item.hasta)}`;
+  return `<div class="item fila">
+    <div>${esc(texto)}</div>
+    <button type="button" class="texto peligro" data-borrar-vacacion="${item.id}">Quitar</button>
+  </div>`;
 }
 
 function minigrilla() {
@@ -287,7 +307,14 @@ function horarios() {
       <div class="franjas">
         ${disponibles.map(franjaFila).join('') || '<p class="vacio">Este día el consultorio no tiene franja.</p>'}
       </div>
-      <details class="suelto">
+    </section>
+    <section class="dia-card">
+      <h3>Horarios ocupados</h3>
+      <p class="bajada">El ${esc(NOMBRES[dia].toLowerCase())} estas horas quedan ocupadas. El paciente no las ve.</p>
+      <div class="franjas">
+        ${ocupadas.map(franjaFila).join('') || '<p class="vacio">Este día no hay horarios ocupados.</p>'}
+      </div>
+      <details class="suelto" data-detalle="dia"${state.horarioAbiertos.dia ? ' open' : ''}>
         <summary>Un día distinto${excepciones.length ? ` · ${excepciones.length}` : ''}</summary>
         ${excepciones.map((bloque) => `<div class="item"><div class="detalle">${esc(corta(bloque.fecha))} ${esc(larga(bloque.fecha))}</div>${bloqueItem(bloque)}</div>`).join('')}
         <form class="mini" data-form="excepcion">
@@ -303,13 +330,16 @@ function horarios() {
           <button class="chico" type="submit">Guardar el día</button>
         </form>
       </details>
-    </section>
-    <section class="dia-card">
-      <h3>Horarios ocupados</h3>
-      <p class="bajada">El ${esc(NOMBRES[dia].toLowerCase())} estas horas quedan ocupadas. El paciente no las ve.</p>
-      <div class="franjas">
-        ${ocupadas.map(franjaFila).join('') || '<p class="vacio">Este día no hay horarios ocupados.</p>'}
-      </div>
+      <details class="suelto" data-detalle="vacaciones"${state.horarioAbiertos.vacaciones ? ' open' : ''}>
+        <summary>Unas vacaciones distintas${state.vacaciones.length ? ` · ${state.vacaciones.length}` : ''}</summary>
+        <p class="pista">Esos días el paciente no ve horarios. Los turnos que ya están quedan.</p>
+        ${state.vacaciones.map(filaVacacion).join('')}
+        <form class="mini" data-form="vacaciones">
+          <label class="ancho">Desde<input name="desde" type="date" required value="${esc(state.vacacionDesde)}"></label>
+          <label class="ancho">Hasta<input name="hasta" type="date" required value="${esc(state.vacacionHasta)}"></label>
+          <button class="chico" type="submit">Guardar las vacaciones</button>
+        </form>
+      </details>
     </section>
     <section class="dia-card">
       <h3>Nueva franja horaria</h3>
@@ -656,7 +686,12 @@ async function cargarDia() {
 }
 
 async function cargarBloques() {
-  state.bloques = await api('/api/admin/bloques');
+  const [bloques, vacaciones] = await Promise.all([
+    api('/api/admin/bloques'),
+    api('/api/admin/vacaciones'),
+  ]);
+  state.bloques = bloques;
+  state.vacaciones = Array.isArray(vacaciones) ? vacaciones : [];
 }
 
 async function cargarSemana() {
@@ -806,12 +841,37 @@ app.addEventListener('change', async (evento) => {
   window.scrollTo(0, y);
 });
 
+app.addEventListener('toggle', (evento) => {
+  const detalles = evento.target;
+  if (!(detalles instanceof HTMLDetailsElement)) return;
+  const cual = detalles.dataset.detalle;
+  if (cual !== 'dia' && cual !== 'vacaciones') return;
+  state.horarioAbiertos[cual] = detalles.open;
+}, true);
+
 app.addEventListener('submit', async (evento) => {
   const form = evento.target.closest('form');
   if (!form) return;
   evento.preventDefault();
   const datos = Object.fromEntries(new FormData(form).entries());
+  if (form.dataset.form === 'vacaciones') {
+    state.horarioAbiertos.vacaciones = true;
+    state.vacacionDesde = datos.desde || '';
+    state.vacacionHasta = datos.hasta || '';
+    const resultado = await api('/api/admin/vacaciones', { method: 'POST', body: datos });
+    state.mensaje = resultado.ok ? 'Vacaciones guardadas.' : resultado.error;
+    state.mensajeMal = !resultado.ok;
+    if (resultado.ok) {
+      state.vacacionDesde = '';
+      state.vacacionHasta = '';
+      await cargarBloques();
+      await cargarSemana();
+    }
+    render();
+    return;
+  }
   if (form.dataset.form === 'semana') datos.weekday = Number(form.dataset.weekday);
+  if (form.dataset.form === 'excepcion') state.horarioAbiertos.dia = true;
   if (datos.tipo === 'cerrado') {
     datos.desde = '00:00';
     datos.hasta = '23:59';
@@ -1326,6 +1386,17 @@ app.addEventListener('click', async (evento) => {
     }
     render();
     window.scrollTo(0, y);
+    return;
+  }
+  const borrarVacacion = evento.target.closest('[data-borrar-vacacion]')?.dataset.borrarVacacion;
+  if (borrarVacacion) {
+    state.horarioAbiertos.vacaciones = true;
+    await api(`/api/admin/vacaciones/${borrarVacacion}`, { method: 'DELETE' });
+    await cargarBloques();
+    await cargarSemana();
+    state.mensaje = 'Vacaciones quitadas.';
+    state.mensajeMal = false;
+    render();
     return;
   }
   const borrar = evento.target.closest('[data-borrar]')?.dataset.borrar;
