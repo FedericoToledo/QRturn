@@ -1,3 +1,13 @@
+export const TEMAS = ['original', 'turquesa', 'verdes', 'oscuro'];
+export const FUENTES = ['fraunces', 'source-serif', 'literata', 'source-sans', 'manrope'];
+
+export function aplicarApariencia(ajustes = {}) {
+  document.documentElement.dataset.tema = TEMAS.includes(ajustes.tema) ? ajustes.tema : 'turquesa';
+  document.documentElement.dataset.fuente = FUENTES.includes(ajustes.fuente) ? ajustes.fuente : 'fraunces';
+  const icono = document.querySelector('link[rel="icon"]');
+  if (icono && ajustes.logo) icono.href = ajustes.logo;
+}
+
 export function esc(valor) {
   return String(valor ?? '').replace(/[&<>"']/g, (caracter) => ({
     '&': '&amp;',

@@ -1,4 +1,5 @@
-import { api, claseValidacion, corta, esc, larga, obrasHtml, sumar } from './util.js';
+import { exportarPdf } from './imprimir.js';
+import { api, aplicarApariencia, corta, esc, larga, obrasHtml, sumar } from './util.js';
 
 const app = document.querySelector('#app');
 const NOMBRES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -20,6 +21,24 @@ const state = {
   horarioDia: null,
   semana: null,
   semanasAdelante: 0,
+  patologias: [],
+  inicio: null,
+  aviso: '',
+  nuevaPatologia: '',
+  nuevaMinutos: '',
+  claveNueva: '',
+  pacienteAbierto: null,
+  facturacionAbierta: null,
+  historias: [],
+  historiaForm: false,
+  historiaDiagnostico: '',
+  historiaAnotacion: '',
+  apartado: null,
+  archivos: [],
+  sumarAbierto: false,
+  capturaPaciente: null,
+  editando: null,
+  edicion: null,
 };
 
 function nav() {
@@ -41,7 +60,7 @@ function login() {
       : '<span class="tecla vacia"></span>'
   )).join('');
   return `<div class="lockup">
-      <img class="mark" src="/image/logo.png" alt="">
+      <img class="mark" src="${esc(state.inicio?.logo || '/image/logoRebranding.png')}" alt="">
       <div>
         <p class="marca">Dent.</p>
         <h1>Agenda</h1>
@@ -84,14 +103,12 @@ function agenda() {
     }
     const turno = evento.turno;
     const abierto = state.abierto === turno.id;
-    const validacion = turno.validacion;
     return `<article class="turno" data-turno="${turno.id}">
       <div class="fila"><span>${esc(turno.hora)}</span><span>${esc(turno.estado)}</span></div>
       <div class="quien">${esc(turno.apellido)}, ${esc(turno.nombre)}</div>
+      ${turno.patologia || turno.duracion_min ? `<div class="detalle">${esc(turno.patologia ? `${turno.patologia} · ` : '')}${esc(turno.duracion_min)} min</div>` : ''}
       <div class="detalle">${esc(turno.obra)} · DNI ${esc(turno.dni)}</div>
-      ${validacion ? `<span class="badge ${claseValidacion(validacion.estado)}">${esc(validacion.titulo)}</span>` : ''}
       ${abierto ? `<div class="detalle">Afiliado ${esc(turno.nro_afiliado || '—')} · código ${esc(turno.codigo)}</div>
-        <p class="detalle">${esc(validacion?.detalle || '')}</p>
         <div class="acciones">
           <button type="button" class="chico" data-estado="confirmado" data-id="${turno.id}">Cobertura ok</button>
           <button type="button" class="chico" data-estado="atendido" data-id="${turno.id}">Atendido</button>
@@ -101,12 +118,12 @@ function agenda() {
     </article>`;
   }).join('');
   return `<div class="dia-nav">
-      <button type="button" data-accion="dia-anterior" aria-label="Día anterior">‹</button>
+      <button type="button" class="flecha" data-accion="dia-anterior" aria-label="Día anterior">‹</button>
       <div><p class="eyebrow">Agenda</p><h2>${esc(larga(dia.fecha))}</h2></div>
-      <button type="button" data-accion="dia-siguiente" aria-label="Día siguiente">›</button>
+      <button type="button" class="flecha" data-accion="dia-siguiente" aria-label="Día siguiente">›</button>
     </div>
     <p class="bajada">Consultorio: ${esc(horasConsultorio)}.</p>
-    ${dia.fecha === hoyLocal() ? '' : '<button class="enlace" type="button" data-accion="hoy">Volver a hoy</button>'}
+    ${dia.fecha === hoyLocal() ? '' : '<button class="btn secundario chico" type="button" data-accion="hoy">Volver a hoy</button>'}
     ${lista || '<p class="vacio">Este día no tiene nada cargado.</p>'}
     ${state.anotar ? formularioAnotar() : ''}
     ${nota(state.mensaje, state.mensajeMal ? 'mal' : 'bien')}`;
@@ -143,6 +160,17 @@ function rangoSemana(desde, hasta) {
   return `${inicio} al ${fin}`;
 }
 
+function motivoInicial(lista) {
+  const items = lista || [];
+  return items.find((item) => item.nombre.toLocaleLowerCase('es').includes('primera vez')) || items[0] || null;
+}
+
+function opcionesMotivo(elegido) {
+  return (state.patologias || []).map((item) => (
+    `<option value="${esc(item.id)}" ${String(item.id) === String(elegido) ? 'selected' : ''}>${esc(item.nombre)} · ${esc(item.minutos)} min</option>`
+  )).join('');
+}
+
 function formularioAnotar() {
   const anotar = state.anotar;
   return `<section class="caja" id="anotar">
@@ -159,6 +187,8 @@ function formularioAnotar() {
     <p class="pista">Elegida: ${esc(anotar.otra ? 'Otra' : anotar.obra?.etiqueta || 'ninguna')}</p>
     ${anotar.otra ? `<input data-anotar="obraOtra" placeholder="Nombre de la cobertura" value="${esc(anotar.obraOtra)}">` : ''}
     ${anotar.obra?.formato === 'ninguno' ? '' : `<label for="a-nro">Número de afiliado</label><input id="a-nro" data-anotar="nro" value="${esc(anotar.nro)}">`}
+    <label for="a-motivo">Motivo</label>
+    <select id="a-motivo" data-anotar="patologiaId">${opcionesMotivo(anotar.patologiaId)}</select>
     ${nota(anotar.error, 'mal')}
     <button class="btn" type="button" data-accion="guardar-anotar">Guardar turno</button>
     <button class="texto" type="button" data-accion="cerrar-anotar">Cerrar</button>
@@ -210,9 +240,10 @@ function minigrilla() {
     const ocupados = (dia.ocupados || []).map((ocupado) => (
       `<span class="celda ocupada" title="${esc(ocupado.lugar)}">${esc(textoOcupado(ocupado))}</span>`
     ));
-    const turnos = dia.turnos.map((turno) => (
-      `<button type="button" class="celda ${esc(turno.estado)}" data-ir-fecha="${esc(dia.fecha)}" data-ir-id="${turno.id}" aria-label="${esc(turno.hora)} ${esc(turno.apellido)}">${esc(turno.hora)}</button>`
-    ));
+    const turnos = dia.turnos.map((turno) => {
+      const detalle = [turno.apellido, turno.patologia, turno.duracion_min ? `${turno.duracion_min} min` : ''].filter(Boolean).join(' · ');
+      return `<button type="button" class="celda ${esc(turno.estado)}" data-ir-fecha="${esc(dia.fecha)}" data-ir-id="${turno.id}" title="${esc(detalle)}" aria-label="${esc(turno.hora)} ${esc(detalle)}">${esc(turno.hora)}</button>`;
+    });
     const celdas = [...ocupados, ...turnos].join('') || '<span class="celda hueco">·</span>';
     return `<div class="col ${dia.fecha === hoy ? 'hoy' : ''}">
       <span class="col-dia">${cortos[weekdayDe(dia.fecha)]}</span>
@@ -231,7 +262,7 @@ function minigrilla() {
       ${anterior}
       <button type="button" class="semana-paso" data-accion="semana-siguiente">Siguiente semana</button>
     </div>
-    <p class="pista">Marrón: ocupado. Verde: turno.</p>
+    <p class="pista">Suave: ocupado. Intenso: turno.</p>
     <div class="minigrilla">${columnas}</div>
   </section>`;
 }
@@ -299,18 +330,277 @@ function horarios() {
     ${minigrilla()}`;
 }
 
-function pacientes() {
-  const lista = state.pacientes.map((paciente) => `<article class="paciente-item">
-    <strong>${esc(paciente.apellido)}, ${esc(paciente.nombre)}</strong>
-    <div class="detalle">DNI ${esc(paciente.dni)} · ${esc(paciente.obra)}</div>
-    <div class="detalle">${esc(paciente.nro_afiliado || 'Sin número')}</div>
-    ${paciente.validacion ? `<span class="badge ${claseValidacion(paciente.validacion.estado)}">${esc(paciente.validacion.titulo)}</span>` : ''}
+function marcaNumero(paciente) {
+  if (paciente.padron === 'bien') return '<span class="badge bien">Número bien</span>';
+  if (paciente.padron === 'mal') return '<span class="badge mal">Número mal</span>';
+  return '';
+}
+
+function clasePlazo(plazo) {
+  return plazo?.nivel === 'rojo' ? 'rojo' : '';
+}
+
+function circuloPlazo(paciente) {
+  const plazo = paciente.plazo;
+  if (!plazo) return '';
+  const tono = plazo.nivel === 'amarillo' || plazo.nivel === 'rojo' ? plazo.nivel : '';
+  return `<button type="button" class="plazo ${tono}" data-accion="facturacion" data-paciente="${paciente.id}" aria-label="Plazo de facturación"></button>`;
+}
+
+function fechaClinica(iso) {
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return '';
+  return new Intl.DateTimeFormat('es-AR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  }).format(fecha);
+}
+
+function icono(dibujo) {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">${dibujo}</svg>`;
+}
+
+function iconoGaleria() {
+  return icono('<rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.2"/><path d="m7 16 3.2-3.2a1 1 0 0 1 1.4 0L15 16"/><path d="m13.5 14.2 1.1-1.1a1 1 0 0 1 1.4 0L19 16"/>');
+}
+
+function iconoDocumento() {
+  return icono('<path d="M8 4.5h6l4 4V19a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 19V6A1.5 1.5 0 0 1 8 4.5z"/><path d="M14 4.5V8.5h4"/><path d="M9 12.5h6M9 16h4"/>');
+}
+
+function iconoEditar() {
+  return icono('<path d="M4.5 19.5h4L19 9l-4-4L4.5 15.5v4z"/><path d="m13.5 6.5 4 4"/>');
+}
+
+function iconoEliminar() {
+  return icono('<path d="M5 8h14"/><path d="M9 8V6.2h6V8"/><path d="M7.6 8.4 8.3 18h7.4l.7-9.6"/>');
+}
+
+function iconoPdf() {
+  return icono('<path d="M7 3.5h7l4 4V20H7z"/><path d="M14 3.5V8h4"/><path d="M12 11v6M9.6 14.4 12 16.8l2.4-2.4"/>');
+}
+
+function formularioEdicion(paciente) {
+  if (state.editando !== paciente.id || !state.edicion) return '';
+  const edicion = state.edicion;
+  return `<div class="edicion">
+    <div class="par">
+      <div><label for="edicion-nombre">Nombre</label><input id="edicion-nombre" data-edicion="nombre" maxlength="60" value="${esc(edicion.nombre)}"></div>
+      <div><label for="edicion-apellido">Apellido</label><input id="edicion-apellido" data-edicion="apellido" maxlength="60" value="${esc(edicion.apellido)}"></div>
+    </div>
+    <div class="par">
+      <div><label for="edicion-dni">DNI</label><input id="edicion-dni" data-edicion="dni" inputmode="numeric" maxlength="8" value="${esc(edicion.dni)}"></div>
+      <div><label for="edicion-nro">Número</label><input id="edicion-nro" data-edicion="nro" maxlength="20" value="${esc(edicion.nro)}"></div>
+    </div>
+    <label for="edicion-obra">Obra social</label>
+    <input id="edicion-obra" data-edicion="obra" maxlength="80" value="${esc(edicion.obra)}">
+    <button class="btn" type="button" data-accion="guardar-paciente" data-paciente="${paciente.id}">Guardar</button>
+  </div>`;
+}
+
+function filaHistoria(paciente) {
+  const notas = state.historias.map((item) => `<article class="nota-clinica">
+    <p class="fecha-nota">${esc(fechaClinica(item.creado))}</p>
+    ${item.diagnostico ? `<p>${esc(item.diagnostico)}</p>` : ''}
+    ${item.anotacion ? `<p class="detalle">${esc(item.anotacion)}</p>` : ''}
+    <button type="button" class="icono-accion" data-accion="pdf-nota" data-nota="${item.id}" data-paciente="${paciente.id}" aria-label="Exportar PDF" title="Exportar PDF">${iconoPdf()}</button>
   </article>`).join('');
-  return `<p class="eyebrow">Pacientes</p>
+  const form = state.historiaForm ? `<label for="historia-diagnostico">Diagnóstico</label>
+    <textarea id="historia-diagnostico" maxlength="500">${esc(state.historiaDiagnostico)}</textarea>
+    <label for="historia-anotacion">Anotación</label>
+    <textarea id="historia-anotacion" maxlength="500">${esc(state.historiaAnotacion)}</textarea>
+    <button class="btn" type="button" data-accion="guardar-historia" data-paciente="${paciente.id}">Sumar</button>` : '';
+  return `<tr class="sigue ${clasePlazo(paciente.plazo)}"><td>
+    ${formularioEdicion(paciente)}
+    ${notas}
+    <button class="mas" type="button" data-accion="nueva-historia" aria-label="Sumar a la historia">+</button>
+    ${form}
+    ${state.aviso === 'historia' ? nota(state.mensaje, state.mensajeMal ? 'mal' : 'bien') : ''}
+  </td></tr>`;
+}
+
+function filaFactura(paciente) {
+  return `<tr class="sigue ${clasePlazo(paciente.plazo)}"><td>
+    <p class="detalle">Cargar antes del ${esc(paciente.plazo.cuando)}. Es el plazo de esa obra, a mes vencido.</p>
+    <button class="btn" type="button" data-accion="cargue" data-paciente="${paciente.id}" data-periodo="${esc(paciente.plazo.periodo)}">Cargué la facturación</button>
+  </td></tr>`;
+}
+
+function filaPaciente(paciente) {
+  const plazo = paciente.plazo;
+  return `<tr class="fila-paciente ${clasePlazo(plazo)}" data-accion="historia" data-paciente="${paciente.id}">
+    <td>
+      <p class="nombre-paciente">${esc(paciente.apellido)}, ${esc(paciente.nombre)}</p>
+      <div class="detalle">DNI ${esc(paciente.dni)} · <span class="mutual">${esc(paciente.obra)}${circuloPlazo(paciente)}</span></div>
+      <div class="detalle">${esc(paciente.nro_afiliado || 'Sin número')} ${marcaNumero(paciente)}</div>
+      <div class="paciente-acciones">
+        <button type="button" class="camara" data-accion="sacar-foto" data-paciente="${paciente.id}" aria-label="Sacar foto o subir archivo">${iconoCamara()}</button>
+        <button type="button" class="icono-accion" data-accion="apartado" data-apartado="galeria" data-paciente="${paciente.id}" aria-label="Galería" title="Galería">${iconoGaleria()}</button>
+        <button type="button" class="icono-accion" data-accion="apartado" data-apartado="documentos" data-paciente="${paciente.id}" aria-label="Documentos" title="Documentos">${iconoDocumento()}</button>
+        <button type="button" class="icono-accion" data-accion="editar" data-paciente="${paciente.id}" aria-label="Editar paciente" title="Editar">${iconoEditar()}</button>
+        <button type="button" class="icono-accion peligro" data-accion="eliminar" data-paciente="${paciente.id}" aria-label="Eliminar paciente" title="Eliminar">${iconoEliminar()}</button>
+      </div>
+    </td>
+  </tr>
+  ${state.pacienteAbierto === paciente.id ? filaHistoria(paciente) : ''}
+  ${state.facturacionAbierta === paciente.id && plazo ? filaFactura(paciente) : ''}`;
+}
+
+function iconoCamara() {
+  return `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M8.2 7.2 9.4 5.6h5.2l1.2 1.6H19a1.4 1.4 0 0 1 1.4 1.4v9.2A1.4 1.4 0 0 1 19 19H5a1.4 1.4 0 0 1-1.4-1.4V8.6A1.4 1.4 0 0 1 5 7.2h3.2z"/>
+    <circle cx="12" cy="12.6" r="2.7"/>
+  </svg>`;
+}
+
+function tituloApartado(tipo) {
+  if (tipo === 'galeria') return 'Galería';
+  return 'Documentos';
+}
+
+function apartadoVista() {
+  const { id, tipo } = state.apartado;
+  const paciente = state.pacientes.find((item) => item.id === id);
+  const lista = state.archivos.filter((item) => {
+    if (tipo === 'galeria') return item.tipo === 'foto';
+    if (tipo === 'documentos') return item.tipo === 'documento';
+    return true;
+  });
+  const piezas = lista.map((item) => {
+    const url = `/api/admin/pacientes/${id}/archivos/${item.id}`;
+    const cuerpo = item.tipo === 'foto'
+      ? `<img src="${esc(url)}" alt="${esc(item.nombre)}">`
+      : `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(item.nombre)}</a>`;
+    return `<tr>
+      <td class="vista">${cuerpo}</td>
+      <td class="accion"><button type="button" class="texto peligro" data-quitar-archivo="${item.id}">Quitar</button></td>
+    </tr>`;
+  }).join('');
+  const opciones = state.sumarAbierto
+    ? (tipo === 'documentos'
+      ? '<button type="button" class="texto" data-accion="abrir-archivo" data-cual="archivo">Subir archivo</button>'
+      : `<button type="button" class="texto" data-accion="abrir-archivo" data-cual="camara">Tomar foto</button>
+         <button type="button" class="texto" data-accion="abrir-archivo" data-cual="archivo">Subir archivo</button>`)
+    : '';
+  const tabla = piezas
+    ? `<table class="tabla archivos"><tbody>${piezas}</tbody></table>`
+    : '<p class="vacio">Todavía no hay nada.</p>';
+  return `<div class="dia-nav apartado-nav">
+      <button type="button" class="flecha" data-accion="volver-pacientes" aria-label="Volver">‹</button>
+      <div>
+        <p class="eyebrow">${esc(paciente ? `${paciente.apellido}, ${paciente.nombre}` : '')}</p>
+        <h2>${tituloApartado(tipo)}</h2>
+      </div>
+      ${tipo === 'galeria' && lista.length ? `<button type="button" class="icono-accion al-fondo" data-accion="pdf-galeria" aria-label="Exportar galería" title="Exportar PDF">${iconoPdf()}</button>` : ''}
+    </div>
+    <button type="button" class="mas" data-accion="sumar-archivo" aria-label="Sumar">+</button>
+    ${opciones}
+    ${tabla}
+    ${state.aviso === 'archivo' ? nota(state.mensaje, state.mensajeMal ? 'mal' : 'bien') : ''}`;
+}
+
+function archivosOcultos() {
+  return `<input id="archivo-camara" type="file" accept="image/png,image/jpeg,image/webp" capture="environment" hidden>
+    <input id="archivo-paciente" type="file" accept="image/png,image/jpeg,image/webp,application/pdf,text/plain,.txt" hidden>`;
+}
+
+function pacientes() {
+  const filas = state.pacientes.map(filaPaciente).join('');
+  const cuerpo = state.apartado ? apartadoVista() : `<p class="eyebrow">Pacientes</p>
     <h2>Listado de pacientes registrados</h2>
     <label for="q">Buscar</label>
     <input id="q" data-consulta value="${esc(state.consulta)}" placeholder="Apellido o DNI">
-    ${lista || '<p class="vacio">Todavía no hay pacientes.</p>'}`;
+    ${filas ? `<table class="tabla pacientes"><thead><tr><th>Paciente</th></tr></thead><tbody>${filas}</tbody></table>` : '<p class="vacio">Todavía no hay pacientes.</p>'}
+    ${state.aviso === 'archivo' || state.aviso === 'paciente' ? nota(state.mensaje, state.mensajeMal ? 'mal' : 'bien') : ''}`;
+  return cuerpo + archivosOcultos();
+}
+
+function logoDe(ajustes) {
+  return ajustes?.logo || state.inicio?.logo || '/image/logoRebranding.png';
+}
+
+function apariencia() {
+  const tema = state.ajustes.tema || 'turquesa';
+  const fuente = state.ajustes.fuente || 'fraunces';
+  const logo = logoDe(state.ajustes);
+  const propio = logo.startsWith('/logo');
+  const temas = [
+    ['original', 'Original'],
+    ['turquesa', 'Turquesa pastel'],
+    ['verdes', 'Verdes pastel'],
+    ['oscuro', 'Oscuro gris'],
+  ].map(([id, nombre]) => `<button type="button" class="tema${tema === id ? ' on' : ''}" data-poner-tema="${id}" aria-pressed="${tema === id}"><i class="muestra ${id}"></i>${nombre}</button>`).join('');
+  const fuentes = [
+    ['fraunces', 'Fraunces', 'Editorial'],
+    ['source-serif', 'Source Serif', 'Institucional'],
+    ['literata', 'Literata', 'Lectura'],
+    ['source-sans', 'Source Sans', 'Clínica'],
+    ['manrope', 'Manrope', 'Precisa'],
+  ].map(([id, nombre, rol]) => `<button type="button" class="fuente fuente-${id}${fuente === id ? ' on' : ''}" data-poner-fuente="${id}" aria-pressed="${fuente === id}"><span>${nombre}</span><small>${rol}</small></button>`).join('');
+  return `<section class="dia-card" id="tema">
+    <h3>Tema</h3>
+    <p class="bajada">El color de esta agenda y de la pantalla que ve el paciente.</p>
+    <div class="temas">${temas}</div>
+    <h3>Títulos</h3>
+    <p class="bajada">Cinco fuentes de consultorio. Cambian los títulos y los subtítulos. El texto chico queda igual.</p>
+    <div class="fuentes">${fuentes}</div>
+    <h3>Logo</h3>
+    <p class="bajada">El del consultorio. Se ve al sacar turno y en el QR de la puerta.</p>
+    <div class="logo-fila">
+      <img class="logo-previa" src="${esc(logo)}" alt="">
+      <div>
+        <button class="btn secundario archivo" type="button" data-accion="elegir-logo">Cambiar logo</button>
+        <input id="logo-archivo" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+        ${propio ? '<button class="btn secundario chico" type="button" data-accion="logo-original">Volver al original</button>' : ''}
+      </div>
+    </div>
+    ${state.aviso === 'logo' ? nota(state.mensaje, state.mensajeMal ? 'mal' : 'bien') : ''}
+  </section>`;
+}
+
+function tiemposTurnos() {
+  const lista = state.ajustes.patologias || [];
+  const filas = lista.map((item) => `<tr data-patologia="${esc(item.id)}">
+    <td>${esc(item.nombre)}</td>
+    <td class="min">${esc(item.minutos)}</td>
+    <td class="accion"><button type="button" class="texto peligro" data-quitar-patologia="${esc(item.id)}">Quitar</button></td>
+  </tr>`).join('');
+  return `<section class="dia-card" id="tiempos">
+    <h3>Tiempos de turnos</h3>
+    <p class="bajada">El paciente elige el motivo. Esos minutos ocupan la agenda para que el turno de después no se pise.</p>
+    <table class="tabla">
+      <thead><tr><th>Patología</th><th class="min">Min</th><th></th></tr></thead>
+      <tbody>
+        ${filas}
+        <tr class="nueva">
+          <td><input id="nueva-patologia" maxlength="60" placeholder="Nueva patología" autocomplete="off" value="${esc(state.nuevaPatologia)}"></td>
+          <td class="min"><input id="nueva-minutos" inputmode="numeric" placeholder="30" autocomplete="off" value="${esc(state.nuevaMinutos)}"></td>
+          <td class="accion"><button class="texto" type="button" data-accion="agregar-patologia">Agregar</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>`;
+}
+
+function tarjetaQr(ajustes) {
+  return `<section class="dia-card" id="qr-card">
+    <h3>QR de la puerta</h3>
+    <label for="url">Link público</label>
+    <input id="url" data-ajuste="urlPublica" placeholder="https://..." value="${esc(ajustes.urlPublica)}">
+    <p class="pista">Hoy el QR abre ${esc(ajustes.urlQr)}. Con el wifi de casa alcanza si la computadora queda encendida. Para la puerta, con datos móviles, hace falta un link de internet.</p>
+    <section id="poster">
+      <img class="poster-logo" src="${esc(logoDe(ajustes))}" alt="">
+      <p class="marca">${esc(ajustes.marca)}</p>
+      <h2>${esc(ajustes.profesional)}</h2>
+      <p>Odontología · Matrícula ${esc(ajustes.matricula)}</p>
+      <img src="/api/admin/qr.svg?t=${Date.now()}" alt="Código QR para sacar turno">
+      <p class="poster-pie">Sacá tu turno</p>
+      <p>${esc(ajustes.direccion)}</p>
+    </section>
+    <button class="btn secundario" type="button" data-accion="imprimir">Imprimir para la puerta</button>
+  </section>`;
 }
 
 function mas() {
@@ -325,35 +615,22 @@ function mas() {
     <label for="direccion">Dirección</label><input id="direccion" data-ajuste="direccion" value="${esc(ajustes.direccion)}">
     <p class="pista">Ese listado dice Urquiza 300. Si la puerta es otra, escribila acá.</p>
     <label for="bajada">Texto para quien escanea</label><textarea id="bajada" data-ajuste="bajada">${esc(ajustes.bajada)}</textarea>
-    <label for="duracion">Minutos de cada turno</label><input id="duracion" data-ajuste="duracionMin" inputmode="numeric" value="${esc(ajustes.duracionMin)}">
+    ${tiemposTurnos()}
     <label for="horizonte">Días hacia adelante</label><input id="horizonte" data-ajuste="horizonteDias" inputmode="numeric" value="${esc(ajustes.horizonteDias)}">
     <label for="anticipo">Horas de anticipación</label><input id="anticipo" data-ajuste="anticipacionHoras" inputmode="numeric" value="${esc(ajustes.anticipacionHoras)}">
-    <label for="url">Link público del QR</label><input id="url" data-ajuste="urlPublica" placeholder="https://..." value="${esc(ajustes.urlPublica)}">
-    <p class="pista">Hoy el QR abre ${esc(ajustes.urlQr)}. Con el wifi de casa alcanza si la computadora queda encendida. Para la puerta, con datos móviles, hace falta un link de internet.</p>
-    <label for="pin">Clave nueva, 6 números</label><input id="pin" data-ajuste="pin" inputmode="numeric" maxlength="6" placeholder="Dejar vacío para no cambiarla">
-    <label class="check"><input data-ajuste="padronEstricto" type="checkbox" ${ajustes.padronEstricto ? 'checked' : ''}> Si cargo un padrón, rechazar quien no figure</label>
-    ${nota(state.mensaje, state.mensajeMal ? 'mal' : 'bien')}
+    ${tarjetaQr(ajustes)}
+    ${state.aviso === 'ajustes' ? nota(state.mensaje, state.mensajeMal ? 'mal' : 'bien') : ''}
     <button class="btn" type="button" data-accion="guardar-ajustes">Guardar</button>
-    <section id="poster">
-      <img class="poster-logo" src="/image/logo.png" alt="">
-      <p class="marca">${esc(ajustes.marca)}</p>
-      <h2>${esc(ajustes.profesional)}</h2>
-      <p>Odontología · Matrícula ${esc(ajustes.matricula)}</p>
-      <img src="/api/admin/qr.svg?t=${Date.now()}" alt="Código QR para sacar turno">
-      <p class="poster-pie">Sacá tu turno</p>
-      <p>${esc(ajustes.direccion)}</p>
+    ${apariencia()}
+    <section class="dia-card" id="clave">
+      <h3>Clave nueva</h3>
+      <p class="bajada">Seis números. Si la cambiás, la anterior deja de abrir la agenda.</p>
+      <label for="clave-nueva">6 números</label>
+      <input id="clave-nueva" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="Dejar vacío para no cambiarla" value="${esc(state.claveNueva)}">
+      ${state.aviso === 'clave' ? nota(state.mensaje, state.mensajeMal ? 'mal' : 'bien') : ''}
+      <button class="btn" type="button" data-accion="cambiar-clave">Cambiar clave</button>
     </section>
-    <button class="btn secundario" type="button" data-accion="imprimir">Imprimir para la puerta</button>
-    <section class="caja">
-      <h3>Padrón de afiliados</h3>
-      <p class="bajada">No existe un padrón nacional descargable: el número de afiliado es un dato de salud. La Superintendencia lo consulta de a una persona y con usuario de institución. Acá se controla el formato y, si el número es un CUIL, el dígito y el DNI.</p>
-      <p class="bajada">Hay ${esc(ajustes.obras)} obras sociales y prepagas de la provincia cargadas, y ${esc(ajustes.padron)} afiliados en tu padrón propio.</p>
-      <p class="bajada">Si una obra social te pasa un archivo, cargalo. Columnas: rnos, dni, numero. <a href="/api/admin/padron-plantilla.csv">Bajar plantilla</a></p>
-      <input id="archivo-padron" type="file" accept=".csv,text/csv">
-      <label class="check"><input id="reemplazar-padron" type="checkbox"> Reemplazar el padrón anterior</label>
-      <button class="chico" type="button" data-accion="cargar-padron">Cargar archivo</button>
-    </section>
-    <button class="texto peligro" type="button" data-accion="salir">Cerrar sesión</button>`;
+    <button class="btn peligro" type="button" data-accion="salir">Cerrar sesión</button>`;
 }
 
 function render() {
@@ -361,6 +638,16 @@ function render() {
     ? login()
     : { agenda, horarios, pacientes, mas }[state.tab]();
   app.innerHTML = cuerpo + nav();
+}
+
+function irAlTope() {
+  const subir = () => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  };
+  subir();
+  requestAnimationFrame(subir);
 }
 
 async function cargarDia() {
@@ -381,6 +668,16 @@ let timerConsulta = 0;
 let timerObra = 0;
 
 app.addEventListener('input', (evento) => {
+  const campoEdicion = evento.target.dataset.edicion;
+  if (campoEdicion && state.edicion) {
+    state.edicion[campoEdicion] = evento.target.value;
+    return;
+  }
+  if (evento.target.id === 'historia-diagnostico') state.historiaDiagnostico = evento.target.value;
+  if (evento.target.id === 'historia-anotacion') state.historiaAnotacion = evento.target.value;
+  if (evento.target.id === 'nueva-patologia') state.nuevaPatologia = evento.target.value;
+  if (evento.target.id === 'nueva-minutos') state.nuevaMinutos = evento.target.value;
+  if (evento.target.id === 'clave-nueva') state.claveNueva = evento.target.value;
   const ajuste = evento.target.dataset.ajuste;
   if (ajuste && state.ajustes) {
     state.ajustes[ajuste] = evento.target.type === 'checkbox' ? evento.target.checked : evento.target.value;
@@ -414,6 +711,101 @@ app.addEventListener('input', (evento) => {
   }
 });
 
+app.addEventListener('keydown', (evento) => {
+  if (evento.key !== 'Enter') return;
+  if (evento.target.id !== 'nueva-patologia' && evento.target.id !== 'nueva-minutos') return;
+  evento.preventDefault();
+  document.querySelector('[data-accion="agregar-patologia"]')?.click();
+});
+
+function archivoDePaciente(archivo) {
+  const nombre = archivo.name.toLowerCase();
+  const imagen = /^image\/(png|jpe?g|webp)$/.test(archivo.type);
+  const texto = archivo.type === 'application/pdf' || nombre.endsWith('.pdf')
+    || archivo.type === 'text/plain' || nombre.endsWith('.txt');
+  if (imagen) return 'foto';
+  if (texto) return 'documento';
+  return '';
+}
+
+app.addEventListener('change', async (evento) => {
+  const esArchivo = evento.target.id === 'archivo-camara' || evento.target.id === 'archivo-paciente';
+  if (esArchivo) {
+    const archivo = evento.target.files?.[0];
+    const pacienteId = state.capturaPaciente || state.apartado?.id;
+    evento.target.value = '';
+    if (!archivo || !pacienteId) return;
+    const tipo = archivoDePaciente(archivo);
+    const aviso = (mensaje) => {
+      state.aviso = 'archivo';
+      state.mensaje = mensaje;
+      state.mensajeMal = true;
+      render();
+    };
+    if (!tipo) {
+      aviso('Subí una foto (JPG o PNG) o un texto.');
+      return;
+    }
+    if (archivo.size > 6_000_000) {
+      aviso('El archivo tiene que pesar menos de 6 MB.');
+      return;
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const lector = new FileReader();
+      lector.onload = () => resolve(lector.result);
+      lector.onerror = () => reject(lector.error);
+      lector.readAsDataURL(archivo);
+    });
+    const resultado = await api(`/api/admin/pacientes/${pacienteId}/archivos`, {
+      method: 'POST',
+      body: { nombre: archivo.name, archivo: dataUrl, tipo },
+    });
+    state.sumarAbierto = false;
+    if (!resultado.ok) {
+      aviso(resultado.error);
+      return;
+    }
+    const vista = resultado.tipo === 'foto' ? 'galeria' : 'documentos';
+    const cambia = !state.apartado || state.apartado.id !== pacienteId || state.apartado.tipo !== vista;
+    state.apartado = { id: pacienteId, tipo: vista };
+    state.capturaPaciente = pacienteId;
+    state.aviso = '';
+    state.mensaje = '';
+    state.archivos = await api(`/api/admin/pacientes/${pacienteId}/archivos`);
+    render();
+    if (cambia) irAlTope();
+    return;
+  }
+  if (evento.target.id !== 'logo-archivo') return;
+  const archivo = evento.target.files?.[0];
+  if (!archivo || !state.ajustes) return;
+  if (archivo.size > 1_500_000) {
+    state.aviso = 'logo';
+    state.mensaje = 'El logo tiene que pesar menos de 1,5 MB.';
+    state.mensajeMal = true;
+    render();
+    return;
+  }
+  const imagen = await new Promise((resolve, reject) => {
+    const lector = new FileReader();
+    lector.onload = () => resolve(lector.result);
+    lector.onerror = () => reject(lector.error);
+    lector.readAsDataURL(archivo);
+  });
+  const y = window.scrollY;
+  const resultado = await api('/api/admin/logo', { method: 'POST', body: { imagen } });
+  state.aviso = 'logo';
+  state.mensaje = resultado.ok ? 'Logo actualizado.' : resultado.error;
+  state.mensajeMal = !resultado.ok;
+  if (resultado.ok) {
+    state.ajustes.logo = resultado.logo;
+    if (state.inicio) state.inicio.logo = resultado.logo;
+    aplicarApariencia(state.ajustes);
+  }
+  render();
+  window.scrollTo(0, y);
+});
+
 app.addEventListener('submit', async (evento) => {
   const form = evento.target.closest('form');
   if (!form) return;
@@ -437,14 +829,25 @@ app.addEventListener('click', async (evento) => {
     state.tab = tab;
     state.mensaje = '';
     state.mensajeMal = false;
+    state.aviso = '';
     state.anotar = null;
-    if (tab === 'pacientes') state.pacientes = await api('/api/admin/pacientes?q=');
-    if (tab === 'mas') state.ajustes = await api('/api/admin/ajustes');
+    if (tab === 'pacientes') {
+      state.apartado = null;
+      state.pacienteAbierto = null;
+      state.facturacionAbierta = null;
+      state.pacientes = await api('/api/admin/pacientes?q=');
+    }
+    if (tab === 'mas') {
+      state.ajustes = await api('/api/admin/ajustes');
+      state.patologias = state.ajustes.patologias || [];
+      aplicarApariencia(state.ajustes);
+    }
     if (tab === 'horarios') {
       await cargarBloques();
       await cargarSemana();
     }
     render();
+    irAlTope();
     return;
   }
   const tecla = evento.target.closest('[data-tecla]')?.dataset.tecla;
@@ -456,16 +859,44 @@ app.addEventListener('click', async (evento) => {
       try {
         await api('/api/admin/login', { method: 'POST', body: { pin: state.pin } });
         state.authed = true;
+        state.tab = 'agenda';
+        state.apartado = null;
+        state.pacienteAbierto = null;
+        state.facturacionAbierta = null;
+        state.editando = null;
+        state.edicion = null;
         state.pin = '';
         state.error = '';
         await cargarDia();
         await cargarBloques();
+        const inicio = await api('/api/inicio');
+        state.inicio = inicio;
+        state.patologias = inicio.patologias || [];
+        aplicarApariencia(inicio);
       } catch (error) {
         state.pin = '';
         state.error = error.message;
       }
       render();
+      if (state.authed) irAlTope();
     }
+    return;
+  }
+  const temaElegido = evento.target.closest('[data-poner-tema]')?.dataset.ponerTema;
+  const fuenteElegida = evento.target.closest('[data-poner-fuente]')?.dataset.ponerFuente;
+  if ((temaElegido || fuenteElegida) && state.ajustes) {
+    const y = window.scrollY;
+    if (temaElegido) state.ajustes.tema = temaElegido;
+    if (fuenteElegida) state.ajustes.fuente = fuenteElegida;
+    aplicarApariencia(state.ajustes);
+    const resultado = await api('/api/admin/ajustes', {
+      method: 'PUT',
+      body: { tema: state.ajustes.tema, fuente: state.ajustes.fuente },
+    });
+    state.mensaje = resultado.ok ? '' : resultado.error;
+    state.mensajeMal = !resultado.ok;
+    render();
+    window.scrollTo(0, y);
     return;
   }
   const accion = evento.target.closest('[data-accion]')?.dataset.accion;
@@ -509,6 +940,7 @@ app.addEventListener('click', async (evento) => {
         obraOtra: anotar.otra ? anotar.obraOtra : '',
         fecha: state.fecha,
         hora: anotar.hora,
+        patologiaId: anotar.patologiaId,
       },
     });
     if (!resultado.ok) {
@@ -533,17 +965,21 @@ app.addEventListener('click', async (evento) => {
         matricula: ajustes.matricula,
         direccion: ajustes.direccion,
         bajada: ajustes.bajada,
-        duracionMin: ajustes.duracionMin,
         horizonteDias: ajustes.horizonteDias,
         anticipacionHoras: ajustes.anticipacionHoras,
         urlPublica: ajustes.urlPublica,
-        pin: ajustes.pin || '',
-        padronEstricto: !!ajustes.padronEstricto,
+        tema: ajustes.tema,
+        fuente: ajustes.fuente,
       },
     });
+    state.aviso = 'ajustes';
     state.mensaje = resultado.ok ? 'Guardado.' : resultado.error;
     state.mensajeMal = !resultado.ok;
-    if (resultado.ok) state.ajustes = await api('/api/admin/ajustes');
+    if (resultado.ok) {
+      state.ajustes = await api('/api/admin/ajustes');
+      state.patologias = state.ajustes.patologias || [];
+      aplicarApariencia(state.ajustes);
+    }
     render();
     return;
   }
@@ -551,27 +987,66 @@ app.addEventListener('click', async (evento) => {
     window.print();
     return;
   }
-  if (accion === 'cargar-padron') {
-    const archivo = document.querySelector('#archivo-padron').files?.[0];
-    if (!archivo) {
-      state.mensaje = 'Elegí un archivo CSV.';
+  if (accion === 'agregar-patologia') {
+    const nombre = document.querySelector('#nueva-patologia')?.value || '';
+    const minutos = document.querySelector('#nueva-minutos')?.value || '';
+    const y = window.scrollY;
+    const resultado = await api('/api/admin/patologias', { method: 'POST', body: { nombre, minutos } });
+    state.aviso = 'ajustes';
+    state.mensaje = resultado.ok ? '' : resultado.error;
+    state.mensajeMal = !resultado.ok;
+    if (resultado.ok) {
+      state.nuevaPatologia = '';
+      state.nuevaMinutos = '';
+      state.ajustes = await api('/api/admin/ajustes');
+      state.patologias = state.ajustes.patologias || [];
+    }
+    render();
+    window.scrollTo(0, y);
+    return;
+  }
+  if (accion === 'elegir-logo') {
+    document.querySelector('#logo-archivo')?.click();
+    return;
+  }
+  if (accion === 'cambiar-clave') {
+    const pin = document.querySelector('#clave-nueva')?.value.trim() || '';
+    if (!/^\d{6}$/.test(pin)) {
+      state.aviso = 'clave';
+      state.mensaje = 'La clave nueva tiene que ser de 6 números.';
       state.mensajeMal = true;
       render();
+      document.querySelector('#clave')?.scrollIntoView({ block: 'center' });
       return;
     }
-    const texto = await archivo.text();
-    const filas = parsearCsv(texto);
-    const resultado = await api('/api/admin/padron', {
-      method: 'POST',
-      body: { filas, reemplazar: document.querySelector('#reemplazar-padron').checked },
-    });
-    state.mensaje = `Cargué ${resultado.cargadas} afiliados. ${resultado.omitidas} filas no se entendieron.`;
-    state.mensajeMal = false;
-    state.ajustes = await api('/api/admin/ajustes');
+    if (!window.confirm('¿Confirmás la clave nueva? La anterior deja de abrir la agenda.')) return;
+    const y = window.scrollY;
+    const resultado = await api('/api/admin/ajustes', { method: 'PUT', body: { pin } });
+    state.aviso = 'clave';
+    state.mensaje = resultado.ok ? 'Clave cambiada.' : resultado.error;
+    state.mensajeMal = !resultado.ok;
+    if (resultado.ok) state.claveNueva = '';
     render();
+    window.scrollTo(0, y);
+    return;
+  }
+  if (accion === 'logo-original') {
+    const y = window.scrollY;
+    const resultado = await api('/api/admin/logo', { method: 'DELETE' });
+    state.aviso = 'logo';
+    state.mensaje = resultado.ok ? 'Volvió el logo original.' : (resultado.error || 'No pude volver al logo original.');
+    state.mensajeMal = !resultado.ok;
+    if (resultado.ok) {
+      state.ajustes.logo = resultado.logo;
+      if (state.inicio) state.inicio.logo = resultado.logo;
+      aplicarApariencia(state.ajustes);
+    }
+    render();
+    window.scrollTo(0, y);
     return;
   }
   if (accion === 'salir') {
+    if (!window.confirm('¿Confirmás cerrar la sesión?')) return;
     await api('/api/admin/logout', { method: 'POST', body: {} });
     state.authed = false;
     state.pin = '';
@@ -594,6 +1069,8 @@ app.addEventListener('click', async (evento) => {
   }
   const anotarHora = evento.target.closest('[data-hora-libre]')?.dataset.horaLibre;
   if (anotarHora) {
+    if (!state.patologias?.length) state.patologias = (await api('/api/inicio')).patologias || [];
+    const defecto = motivoInicial(state.patologias);
     state.anotar = {
       hora: anotarHora,
       nombre: '',
@@ -605,6 +1082,7 @@ app.addEventListener('click', async (evento) => {
       obra: null,
       otra: false,
       obraOtra: '',
+      patologiaId: defecto ? String(defecto.id) : '',
       error: '',
     };
     state.abierto = null;
@@ -652,6 +1130,204 @@ app.addEventListener('click', async (evento) => {
     render();
     return;
   }
+  const pacienteId = Number(evento.target.closest('[data-paciente]')?.dataset.paciente || 0);
+  if (accion === 'historia' && pacienteId) {
+    if (evento.target.closest('button, a, input, textarea, label')) return;
+    if (state.pacienteAbierto === pacienteId) {
+      state.pacienteAbierto = null;
+      state.editando = null;
+      render();
+      return;
+    }
+    state.pacienteAbierto = pacienteId;
+    state.editando = null;
+    state.facturacionAbierta = null;
+    state.historiaForm = false;
+    state.historiaDiagnostico = '';
+    state.historiaAnotacion = '';
+    state.aviso = '';
+    state.historias = await api(`/api/admin/pacientes/${pacienteId}/historia`);
+    render();
+    return;
+  }
+  if (accion === 'editar' && pacienteId) {
+    const paciente = state.pacientes.find((item) => item.id === pacienteId);
+    if (!paciente) return;
+    state.pacienteAbierto = pacienteId;
+    state.facturacionAbierta = null;
+    state.editando = pacienteId;
+    state.edicion = {
+      nombre: paciente.nombre,
+      apellido: paciente.apellido,
+      dni: paciente.dni,
+      obra: paciente.obra,
+      nro: paciente.nro_afiliado || '',
+    };
+    state.aviso = '';
+    state.historias = await api(`/api/admin/pacientes/${pacienteId}/historia`);
+    render();
+    return;
+  }
+  if (accion === 'guardar-paciente' && pacienteId && state.edicion) {
+    const resultado = await api(`/api/admin/pacientes/${pacienteId}`, { method: 'PUT', body: state.edicion });
+    state.aviso = 'historia';
+    state.mensaje = resultado.ok ? '' : resultado.error;
+    state.mensajeMal = !resultado.ok;
+    if (resultado.ok) {
+      state.editando = null;
+      state.pacientes = await api(`/api/admin/pacientes?q=${encodeURIComponent(state.consulta)}`);
+    }
+    render();
+    return;
+  }
+  if (accion === 'eliminar' && pacienteId) {
+    const paciente = state.pacientes.find((item) => item.id === pacienteId);
+    const quien = paciente ? `${paciente.apellido}, ${paciente.nombre}` : 'este paciente';
+    if (!window.confirm(`¿Confirmás eliminar a ${quien}? Se borran los turnos, la historia y los archivos.`)) return;
+    const resultado = await api(`/api/admin/pacientes/${pacienteId}`, { method: 'DELETE' });
+    state.aviso = 'paciente';
+    state.mensaje = resultado.ok ? '' : resultado.error;
+    state.mensajeMal = !resultado.ok;
+    if (resultado.ok) {
+      state.pacienteAbierto = null;
+      state.editando = null;
+      state.apartado = null;
+      state.pacientes = await api(`/api/admin/pacientes?q=${encodeURIComponent(state.consulta)}`);
+    }
+    render();
+    return;
+  }
+  if (accion === 'pdf-nota' && pacienteId) {
+    const notaId = Number(evento.target.closest('[data-nota]')?.dataset.nota);
+    const clinica = state.historias.find((item) => item.id === notaId);
+    const paciente = state.pacientes.find((item) => item.id === pacienteId);
+    if (!clinica || !paciente || !state.inicio) return;
+    await exportarPdf({
+      titulo: `Historia ${paciente.apellido}`,
+      ficha: state.inicio,
+      paciente,
+      nota: {
+        fecha: fechaClinica(clinica.creado),
+        diagnostico: clinica.diagnostico,
+        anotacion: clinica.anotacion,
+      },
+    });
+    return;
+  }
+  if (accion === 'pdf-galeria' && state.apartado) {
+    const paciente = state.pacientes.find((item) => item.id === state.apartado.id);
+    const fotos = state.archivos.filter((item) => item.tipo === 'foto');
+    if (!paciente || !fotos.length || !state.inicio) return;
+    await exportarPdf({
+      titulo: `Galería ${paciente.apellido}`,
+      ficha: state.inicio,
+      paciente,
+      fotos: fotos.map((item) => ({
+        src: `/api/admin/pacientes/${paciente.id}/archivos/${item.id}`,
+        nombre: item.nombre,
+      })),
+    });
+    return;
+  }
+  if (accion === 'nueva-historia') {
+    state.historiaForm = !state.historiaForm;
+    state.aviso = '';
+    render();
+    return;
+  }
+  if (accion === 'guardar-historia' && pacienteId) {
+    const resultado = await api(`/api/admin/pacientes/${pacienteId}/historia`, {
+      method: 'POST',
+      body: { diagnostico: state.historiaDiagnostico, anotacion: state.historiaAnotacion },
+    });
+    state.aviso = 'historia';
+    state.mensaje = resultado.ok ? '' : resultado.error;
+    state.mensajeMal = !resultado.ok;
+    if (resultado.ok) {
+      state.historiaDiagnostico = '';
+      state.historiaAnotacion = '';
+      state.historiaForm = false;
+      state.historias = await api(`/api/admin/pacientes/${pacienteId}/historia`);
+    }
+    render();
+    return;
+  }
+  if (accion === 'facturacion' && pacienteId) {
+    state.facturacionAbierta = state.facturacionAbierta === pacienteId ? null : pacienteId;
+    if (state.facturacionAbierta) state.pacienteAbierto = null;
+    render();
+    return;
+  }
+  if (accion === 'cargue' && pacienteId) {
+    const periodo = evento.target.closest('[data-periodo]')?.dataset.periodo;
+    const resultado = await api(`/api/admin/pacientes/${pacienteId}/carga`, { method: 'POST', body: { periodo } });
+    state.aviso = 'historia';
+    state.mensaje = resultado.ok ? '' : resultado.error;
+    state.mensajeMal = !resultado.ok;
+    if (resultado.ok) {
+      state.facturacionAbierta = null;
+      state.pacientes = await api(`/api/admin/pacientes?q=${encodeURIComponent(state.consulta)}`);
+    }
+    render();
+    return;
+  }
+  if (accion === 'sacar-foto' && pacienteId) {
+    state.capturaPaciente = pacienteId;
+    document.querySelector('#archivo-paciente')?.click();
+    return;
+  }
+  if (accion === 'apartado' && pacienteId) {
+    const tipo = evento.target.closest('[data-apartado]')?.dataset.apartado;
+    state.apartado = { id: pacienteId, tipo };
+    state.sumarAbierto = false;
+    state.aviso = '';
+    state.archivos = await api(`/api/admin/pacientes/${pacienteId}/archivos`);
+    render();
+    window.scrollTo(0, 0);
+    return;
+  }
+  if (accion === 'volver-pacientes') {
+    state.apartado = null;
+    state.archivos = [];
+    state.sumarAbierto = false;
+    state.aviso = '';
+    render();
+    window.scrollTo(0, 0);
+    return;
+  }
+  if (accion === 'sumar-archivo') {
+    state.sumarAbierto = !state.sumarAbierto;
+    render();
+    return;
+  }
+  if (accion === 'abrir-archivo') {
+    const cual = evento.target.closest('[data-cual]')?.dataset.cual;
+    state.capturaPaciente = state.apartado?.id || state.capturaPaciente;
+    document.querySelector(cual === 'camara' ? '#archivo-camara' : '#archivo-paciente')?.click();
+    return;
+  }
+  const quitarArchivo = evento.target.closest('[data-quitar-archivo]')?.dataset.quitarArchivo;
+  if (quitarArchivo && state.apartado) {
+    await api(`/api/admin/pacientes/${state.apartado.id}/archivos/${quitarArchivo}`, { method: 'DELETE' });
+    state.archivos = await api(`/api/admin/pacientes/${state.apartado.id}/archivos`);
+    render();
+    return;
+  }
+  const quitarPatologia = evento.target.closest('[data-quitar-patologia]')?.dataset.quitarPatologia;
+  if (quitarPatologia) {
+    const y = window.scrollY;
+    const resultado = await api(`/api/admin/patologias/${quitarPatologia}`, { method: 'DELETE' });
+    state.aviso = 'ajustes';
+    state.mensaje = resultado.ok ? '' : resultado.error;
+    state.mensajeMal = !resultado.ok;
+    if (resultado.ok) {
+      state.ajustes = await api('/api/admin/ajustes');
+      state.patologias = state.ajustes.patologias || [];
+    }
+    render();
+    window.scrollTo(0, y);
+    return;
+  }
   const borrar = evento.target.closest('[data-borrar]')?.dataset.borrar;
   if (borrar) {
     await api(`/api/admin/bloques/${borrar}`, { method: 'DELETE' });
@@ -668,30 +1344,11 @@ app.addEventListener('click', async (evento) => {
   }
 });
 
-function parsearCsv(texto) {
-  const lineas = texto.replace(/^\uFEFF/, '').split(/\r?\n/).map((linea) => linea.trim()).filter(Boolean);
-  if (!lineas.length) return [];
-  const partir = (linea) => linea.split(/[;,]/).map((parte) => parte.trim().replace(/^"|"$/g, ''));
-  const cabeza = partir(lineas[0]).map((parte) => parte.toLowerCase());
-  let inicio = 0;
-  let colRnos = 0;
-  let colDni = 1;
-  let colNumero = 2;
-  const idx = (opciones) => cabeza.findIndex((parte) => opciones.some((opcion) => parte.includes(opcion)));
-  if (idx(['dni', 'documento']) !== -1) {
-    inicio = 1;
-    colRnos = Math.max(0, idx(['rnos', 'codigo']));
-    colDni = idx(['dni', 'documento']);
-    colNumero = idx(['numero', 'número', 'afiliado', 'nro']);
-    if (colNumero < 0) colNumero = 2;
-  }
-  return lineas.slice(inicio).map((linea) => {
-    const columnas = partir(linea);
-    return { rnos: columnas[colRnos], dni: columnas[colDni], numero: columnas[colNumero] };
-  });
-}
-
 try {
+  const inicio = await api('/api/inicio');
+  state.inicio = inicio;
+  state.patologias = inicio.patologias || [];
+  aplicarApariencia(inicio);
   await cargarDia();
   state.authed = true;
   await cargarBloques();

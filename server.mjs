@@ -1,5 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
+import { existsSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,18 +22,36 @@ import {
 } from './lib/agenda.mjs';
 import {
   abrir,
+  actualizarPatologia,
+  borrarPatologia,
   borrarSesion,
   buscarObras,
   checkPin,
   contarObras,
   contarPadron,
+  crearPatologia,
   crearSesion,
   getSetting,
   importarPadron,
+  listarPatologias,
+  rutaDb,
+  patologiaPorDefecto,
+  patologiaPorId,
   sesionValida,
   setPin,
   setSetting,
 } from './lib/db.mjs';
+import {
+  abrirArchivo,
+  borrarArchivo,
+  borrarPaciente,
+  crearHistoria,
+  editarPaciente,
+  guardarArchivo,
+  listarArchivos,
+  listarHistoria,
+  marcarCarga,
+} from './lib/pacientes.mjs';
 import { validarDni, revisarDatos } from './lib/validar.mjs';
 
 const publico = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
@@ -141,6 +160,14 @@ function urlDelQr() {
   return `http://${lanIp()}:${puertoReal}/`;
 }
 
+const TEMAS = ['original', 'turquesa', 'verdes', 'oscuro'];
+const FUENTES = ['fraunces', 'source-serif', 'literata', 'source-sans', 'manrope'];
+
+function valorDe(lista, clave, defecto) {
+  const valor = getSetting(clave);
+  return lista.includes(valor) ? valor : defecto;
+}
+
 function fichaPublica() {
   return {
     marca: getSetting('marca'),
@@ -148,7 +175,75 @@ function fichaPublica() {
     matricula: getSetting('matricula'),
     direccion: getSetting('direccion'),
     bajada: getSetting('bajada'),
+    tema: valorDe(TEMAS, 'tema', 'turquesa'),
+    fuente: valorDe(FUENTES, 'fuente', 'fraunces'),
+    patologias: listarPatologias(),
+    logo: urlLogo(),
   };
+}
+
+const LOGOS = {
+  png: {
+    mime: 'image/png',
+    firma: (buffer) => buffer.length > 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47,
+  },
+  jpg: {
+    mime: 'image/jpeg',
+    firma: (buffer) => buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff,
+  },
+  webp: {
+    mime: 'image/webp',
+    firma: (buffer) => buffer.length > 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP',
+  },
+};
+
+function archivosLogo() {
+  const base = path.basename(rutaDb, path.extname(rutaDb));
+  const prefijo = base === 'dentapp' ? 'logo' : `${base}.logo`;
+  const carpeta = path.dirname(rutaDb);
+  return Object.keys(LOGOS).map((ext) => ({ ext, ruta: path.join(carpeta, `${prefijo}.${ext}`) }));
+}
+
+function archivoLogo() {
+  return archivosLogo().find((archivo) => existsSync(archivo.ruta)) || null;
+}
+
+function urlLogo() {
+  const archivo = archivoLogo();
+  if (!archivo) return '/image/logoRebranding.png';
+  return `/logo?t=${Math.floor(statSync(archivo.ruta).mtimeMs)}`;
+}
+
+function borrarLogos() {
+  for (const archivo of archivosLogo()) {
+    if (existsSync(archivo.ruta)) unlinkSync(archivo.ruta);
+  }
+}
+
+function guardarLogo(imagen) {
+  const coincidencia = String(imagen || '').match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=\s]+)$/);
+  if (!coincidencia) return { ok: false, error: 'El logo tiene que ser PNG, JPG o WebP.' };
+  const ext = coincidencia[1] === 'jpeg' ? 'jpg' : coincidencia[1];
+  let buffer;
+  try {
+    buffer = Buffer.from(coincidencia[2].replace(/\s/g, ''), 'base64');
+  } catch {
+    return { ok: false, error: 'No pude leer esa imagen.' };
+  }
+  if (buffer.length < 32 || buffer.length > 1_500_000 || !LOGOS[ext].firma(buffer)) {
+    return { ok: false, error: 'Esa imagen no sirve como logo. Usá un PNG, JPG o WebP de hasta 1,5 MB.' };
+  }
+  borrarLogos();
+  const destino = archivosLogo().find((archivo) => archivo.ext === ext);
+  writeFileSync(destino.ruta, buffer);
+  return { ok: true, logo: urlLogo() };
+}
+
+function motivoPedido(id) {
+  if (id == null || id === '') return { motivo: patologiaPorDefecto(), falta: false };
+  const motivo = patologiaPorId(id);
+  if (!motivo) return { motivo: null, falta: true };
+  return { motivo, falta: false };
 }
 
 async function archivoEstatico(res, ruta) {
@@ -183,12 +278,36 @@ async function atender(req, res) {
     enviarJson(res, 200, fichaPublica());
     return;
   }
+  if (ruta === '/logo' && req.method === 'GET') {
+    const archivo = archivoLogo();
+    if (!archivo) {
+      await archivoEstatico(res, path.join(publico, 'image', 'logoRebranding.png'));
+      return;
+    }
+    const data = await fs.readFile(archivo.ruta);
+    res.writeHead(200, {
+      'content-type': LOGOS[archivo.ext].mime,
+      'cache-control': 'no-store',
+      'content-length': data.length,
+    });
+    res.end(data);
+    return;
+  }
   if (ruta === '/api/obras' && req.method === 'GET') {
     enviarJson(res, 200, buscarObras(url.searchParams.get('q') || ''));
     return;
   }
+  if (ruta === '/api/patologias' && req.method === 'GET') {
+    enviarJson(res, 200, listarPatologias());
+    return;
+  }
   if (ruta === '/api/disponibles' && req.method === 'GET') {
-    enviarJson(res, 200, { dias: diasDisponibles() });
+    const { motivo, falta } = motivoPedido(url.searchParams.get('patologia'));
+    if (falta || !motivo) {
+      enviarJson(res, 200, { dias: [], patologia: null });
+      return;
+    }
+    enviarJson(res, 200, { dias: diasDisponibles({ duracion: motivo.minutos }), patologia: motivo });
     return;
   }
 
@@ -239,7 +358,12 @@ async function atender(req, res) {
       enviarJson(res, 200, { ok: false, error: revision.errores[0] || 'Revisá los datos.', validacion: revision.validacion || null });
       return;
     }
-    enviarJson(res, 200, crearTurno(revision.datos, cuerpo.fecha, cuerpo.hora));
+    const { motivo, falta } = motivoPedido(cuerpo.patologiaId);
+    if (falta || !motivo) {
+      enviarJson(res, 200, { ok: false, error: falta ? 'Elegí el motivo del turno.' : 'Falta configurar los tiempos de turno.' });
+      return;
+    }
+    enviarJson(res, 200, crearTurno(revision.datos, cuerpo.fecha, cuerpo.hora, { patologia: motivo }));
     return;
   }
 
@@ -325,7 +449,31 @@ async function rutaAdmin(req, res, ruta, url) {
       enviarJson(res, 200, { ok: false, error: revision.errores[0] || 'Revisá los datos.' });
       return true;
     }
-    enviarJson(res, 200, crearTurno(revision.datos, cuerpo.fecha, cuerpo.hora, { saltearAnticipacion: true, admin: true }));
+    const { motivo, falta } = motivoPedido(cuerpo.patologiaId);
+    if (falta || !motivo) {
+      enviarJson(res, 200, { ok: false, error: falta ? 'Elegí el motivo del turno.' : 'Falta configurar los tiempos de turno.' });
+      return true;
+    }
+    enviarJson(res, 200, crearTurno(revision.datos, cuerpo.fecha, cuerpo.hora, {
+      saltearAnticipacion: true,
+      admin: true,
+      patologia: motivo,
+    }));
+    return true;
+  }
+  if (ruta === '/api/admin/patologias' && req.method === 'POST') {
+    const cuerpo = await leerCuerpo(req);
+    enviarJson(res, 200, crearPatologia(cuerpo.nombre, cuerpo.minutos));
+    return true;
+  }
+  const patologiaRuta = ruta.match(/^\/api\/admin\/patologias\/(\d+)$/);
+  if (patologiaRuta && req.method === 'PUT') {
+    const cuerpo = await leerCuerpo(req);
+    enviarJson(res, 200, actualizarPatologia(patologiaRuta[1], cuerpo.nombre, cuerpo.minutos));
+    return true;
+  }
+  if (patologiaRuta && req.method === 'DELETE') {
+    enviarJson(res, 200, borrarPatologia(patologiaRuta[1]));
     return true;
   }
   const turno = ruta.match(/^\/api\/admin\/turnos\/(\d+)$/);
@@ -335,8 +483,63 @@ async function rutaAdmin(req, res, ruta, url) {
     enviarJson(res, 200, { ok });
     return true;
   }
+  const archivoUno = ruta.match(/^\/api\/admin\/pacientes\/(\d+)\/archivos\/(\d+)$/);
+  if (archivoUno && req.method === 'GET') {
+    const archivo = abrirArchivo(archivoUno[1], archivoUno[2]);
+    if (!archivo) {
+      enviarJson(res, 404, { error: 'No encontré ese archivo.' });
+      return true;
+    }
+    res.writeHead(200, {
+      'content-type': archivo.mime,
+      'cache-control': 'no-store',
+      'content-length': archivo.buffer.length,
+    });
+    res.end(archivo.buffer);
+    return true;
+  }
+  if (archivoUno && req.method === 'DELETE') {
+    enviarJson(res, 200, borrarArchivo(archivoUno[1], archivoUno[2]));
+    return true;
+  }
+  const archivosRuta = ruta.match(/^\/api\/admin\/pacientes\/(\d+)\/archivos$/);
+  if (archivosRuta && req.method === 'GET') {
+    enviarJson(res, 200, listarArchivos(archivosRuta[1], url.searchParams.get('tipo') || ''));
+    return true;
+  }
+  if (archivosRuta && req.method === 'POST') {
+    const cuerpo = await leerCuerpo(req, 8_500_000);
+    enviarJson(res, 200, guardarArchivo(archivosRuta[1], cuerpo.nombre, cuerpo.archivo, cuerpo.tipo));
+    return true;
+  }
+  const historiaRuta = ruta.match(/^\/api\/admin\/pacientes\/(\d+)\/historia$/);
+  if (historiaRuta && req.method === 'GET') {
+    enviarJson(res, 200, listarHistoria(historiaRuta[1]));
+    return true;
+  }
+  if (historiaRuta && req.method === 'POST') {
+    const cuerpo = await leerCuerpo(req);
+    enviarJson(res, 200, crearHistoria(historiaRuta[1], cuerpo.diagnostico, cuerpo.anotacion));
+    return true;
+  }
+  const cargaRuta = ruta.match(/^\/api\/admin\/pacientes\/(\d+)\/carga$/);
+  if (cargaRuta && req.method === 'POST') {
+    const cuerpo = await leerCuerpo(req);
+    enviarJson(res, 200, marcarCarga(cargaRuta[1], cuerpo.periodo));
+    return true;
+  }
   if (ruta === '/api/admin/pacientes' && req.method === 'GET') {
     enviarJson(res, 200, buscarPacientes(url.searchParams.get('q') || ''));
+    return true;
+  }
+  const pacienteRuta = ruta.match(/^\/api\/admin\/pacientes\/(\d+)$/);
+  if (pacienteRuta && req.method === 'PUT') {
+    const cuerpo = await leerCuerpo(req);
+    enviarJson(res, 200, editarPaciente(pacienteRuta[1], cuerpo));
+    return true;
+  }
+  if (pacienteRuta && req.method === 'DELETE') {
+    enviarJson(res, 200, borrarPaciente(pacienteRuta[1]));
     return true;
   }
   if (ruta === '/api/admin/ajustes' && req.method === 'GET') {
@@ -373,6 +576,8 @@ async function rutaAdmin(req, res, ruta, url) {
       }
       setSetting('url_publica', publicaUrl);
     }
+    if (cuerpo.tema != null) setSetting('tema', TEMAS.includes(cuerpo.tema) ? cuerpo.tema : 'turquesa');
+    if (cuerpo.fuente != null) setSetting('fuente', FUENTES.includes(cuerpo.fuente) ? cuerpo.fuente : 'fraunces');
     if (cuerpo.padronEstricto != null) setSetting('padron_estricto', cuerpo.padronEstricto ? '1' : '0');
     if (cuerpo.pin) {
       if (!/^\d{6}$/.test(String(cuerpo.pin))) {
@@ -381,7 +586,17 @@ async function rutaAdmin(req, res, ruta, url) {
       }
       setPin(String(cuerpo.pin));
     }
-    enviarJson(res, 200, { ok: true, urlQr: urlDelQr() });
+    enviarJson(res, 200, { ok: true, urlQr: urlDelQr(), logo: urlLogo() });
+    return true;
+  }
+  if (ruta === '/api/admin/logo' && req.method === 'POST') {
+    const cuerpo = await leerCuerpo(req, 2_500_000);
+    enviarJson(res, 200, guardarLogo(cuerpo.imagen));
+    return true;
+  }
+  if (ruta === '/api/admin/logo' && req.method === 'DELETE') {
+    borrarLogos();
+    enviarJson(res, 200, { ok: true, logo: urlLogo() });
     return true;
   }
   if (ruta === '/api/admin/padron' && req.method === 'POST') {

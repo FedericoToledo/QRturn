@@ -3,3 +3,11 @@ data/*.sqlite
 data/*.sqlite-*
 data/clave-inicial.txt
 data/clave-de-prueba.txt
+data/logo.png
+data/logo.jpg
+data/logo.webp
+data/*.logo.png
+data/*.logo.jpg
+data/*.logo.webp
+data/pacientes/
+data/*.pacientes/
