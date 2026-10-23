@@ -408,7 +408,7 @@ function filaHistoria(paciente) {
     <button type="button" class="icono-accion" data-accion="pdf-nota" data-nota="${item.id}" data-paciente="${paciente.id}" aria-label="Exportar PDF" title="Exportar PDF">${iconoPdf()}</button>
   </article>`).join('');
   const form = state.historiaForm ? `<label for="historia-diagnostico">Diagnóstico</label>
-    <textarea id="historia-diagnostico" maxlength="500">${esc(state.historiaDiagnostico)}</textarea>
+    <input id="historia-diagnostico" class="campo" maxlength="500" value="${esc(state.historiaDiagnostico)}">
     <label for="historia-anotacion">Anotación</label>
     <textarea id="historia-anotacion" maxlength="500">${esc(state.historiaAnotacion)}</textarea>
     <button class="btn" type="button" data-accion="guardar-historia" data-paciente="${paciente.id}">Sumar</button>` : '';

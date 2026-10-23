@@ -624,6 +624,13 @@ textarea { min-height: 88px; resize: vertical; }
   border-radius: 0;
   background: transparent;
 }
+.tabla input.campo {
+  margin-top: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
 .tabla tr.nueva td { border-top: 0; padding-top: 12px; }
 .tabla.pacientes tr.rojo td { background: #fde8e6; }
 html[data-tema="oscuro"] .tabla.pacientes tr.rojo td { background: #4a2424; color: #ffd6d4; }
