@@ -649,6 +649,7 @@ html[data-tema="oscuro"] .tabla.pacientes tr.rojo td { background: #4a2424; colo
 }
 .plazo.amarillo { background: #e6b325; }
 .plazo.rojo { background: #c5362b; border-color: #c5362b; }
+.plazo-fecha { margin-left: 6px; white-space: nowrap; }
 .nombre-paciente {
   margin: 0;
   padding: 0;
@@ -679,7 +680,11 @@ tr.fila-paciente { cursor: pointer; }
 .icono-accion.peligro { color: var(--bad); }
 .icono-accion.al-fondo { margin-left: auto; }
 .dia-nav .icono-accion { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 10px; }
-.camara svg, .icono-accion svg { display: block; }
+.camara svg, .icono-accion svg {
+  display: block;
+  width: 19.2px;
+  height: 19.2px;
+}
 .nota-clinica { padding: 8px 0 4px; border-top: 1px solid var(--line); }
 .nota-clinica p { margin: 0; }
 .fecha-nota { margin-bottom: 4px; color: var(--muted); font-size: 12px; }

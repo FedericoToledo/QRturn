@@ -374,7 +374,7 @@ function circuloPlazo(paciente) {
   const plazo = paciente.plazo;
   if (!plazo) return '';
   const tono = plazo.nivel === 'amarillo' || plazo.nivel === 'rojo' ? plazo.nivel : '';
-  return `<button type="button" class="plazo ${tono}" data-accion="facturacion" data-paciente="${paciente.id}" aria-label="Plazo de facturación"></button>`;
+  return `<button type="button" class="plazo ${tono}" data-accion="facturacion" data-paciente="${paciente.id}" aria-label="Plazo de facturación, cierra ${esc(plazo.cuando)}"></button><span class="plazo-fecha">cierra ${esc(plazo.cuando)}</span>`;
 }
 
 function fechaClinica(iso) {
