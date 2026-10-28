@@ -1,0 +1,31 @@
+.demo-barra {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 16px;
+  padding: 8px 14px;
+  background: #1f4a3e;
+  color: #f7f3ea;
+  font-family: Outfit, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.demo-barra p { margin: 0; }
+
+.demo-barra a,
+.demo-barra button {
+  color: #fff;
+  font-weight: 600;
+}
+
+.demo-barra button {
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+}
